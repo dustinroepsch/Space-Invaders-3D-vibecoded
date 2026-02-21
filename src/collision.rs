@@ -1,6 +1,7 @@
 use bevy::prelude::*;
 
 use crate::components::*;
+use crate::effects::spawn_explosion;
 
 pub struct CollisionPlugin;
 
@@ -21,18 +22,23 @@ impl Plugin for CollisionPlugin {
 fn bullet_enemy_collision(
     mut commands: Commands,
     mut score: ResMut<Score>,
+    mut meshes: ResMut<Assets<Mesh>>,
+    mut materials: ResMut<Assets<StandardMaterial>>,
     bullets: Query<(Entity, &Transform), With<Bullet>>,
-    enemies: Query<(Entity, &Transform), With<Enemy>>,
+    enemies: Query<(Entity, &Transform, &EnemyRow), With<Enemy>>,
 ) {
     for (bullet_entity, bullet_transform) in &bullets {
-        for (enemy_entity, enemy_transform) in &enemies {
+        for (enemy_entity, enemy_transform, enemy_row) in &enemies {
             let distance = bullet_transform
                 .translation
                 .distance(enemy_transform.translation);
             if distance < COLLISION_DISTANCE {
+                let pos = enemy_transform.translation;
+                let row = enemy_row.0;
                 commands.entity(bullet_entity).despawn();
                 commands.entity(enemy_entity).despawn();
                 score.value += 10;
+                spawn_explosion(&mut commands, &mut meshes, &mut materials, pos, row);
                 break;
             }
         }

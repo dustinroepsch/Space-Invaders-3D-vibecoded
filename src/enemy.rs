@@ -2,6 +2,7 @@ use bevy::prelude::*;
 use rand::Rng;
 
 use crate::components::*;
+use crate::effects::row_color;
 
 pub struct EnemyPlugin;
 
@@ -17,27 +18,49 @@ impl Plugin for EnemyPlugin {
     }
 }
 
+fn row_emissive(row: usize) -> LinearRgba {
+    match row {
+        0 => LinearRgba::new(5.0, 1.0, 1.0, 1.0),
+        1 => LinearRgba::new(5.0, 3.0, 0.5, 1.0),
+        2 => LinearRgba::new(1.0, 5.0, 1.5, 1.0),
+        _ => LinearRgba::new(3.5, 1.0, 5.0, 1.0),
+    }
+}
+
 fn spawn_enemies(
     mut commands: Commands,
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<StandardMaterial>>,
 ) {
     let mesh = meshes.add(Cuboid::new(0.8, 0.8, 0.8));
-    let material = materials.add(Color::srgb(0.2, 1.0, 0.3));
+
+    // Create a material per row
+    let row_materials: Vec<Handle<StandardMaterial>> = (0..ENEMY_ROWS)
+        .map(|row| {
+            materials.add(StandardMaterial {
+                base_color: row_color(row),
+                emissive: row_emissive(row),
+                metallic: 0.5,
+                perceptual_roughness: 0.4,
+                ..default()
+            })
+        })
+        .collect();
 
     let grid_width = (ENEMY_COLS - 1) as f32 * ENEMY_SPACING;
     let start_x = -grid_width / 2.0;
 
-    for row in 0..ENEMY_ROWS {
+    for (row, row_mat) in row_materials.iter().enumerate() {
         for col in 0..ENEMY_COLS {
             let x = start_x + col as f32 * ENEMY_SPACING;
             let z = ENEMY_START_Z - row as f32 * ENEMY_SPACING;
 
             commands.spawn((
                 Mesh3d(mesh.clone()),
-                MeshMaterial3d(material.clone()),
+                MeshMaterial3d(row_mat.clone()),
                 Transform::from_xyz(x, ENEMY_START_Y, z),
                 Enemy,
+                EnemyRow(row),
             ));
         }
     }
@@ -98,7 +121,11 @@ fn enemy_shoot(
 
     commands.spawn((
         Mesh3d(meshes.add(Cuboid::new(0.15, 0.15, 0.4))),
-        MeshMaterial3d(materials.add(Color::srgb(1.0, 0.2, 0.2))),
+        MeshMaterial3d(materials.add(StandardMaterial {
+            base_color: Color::srgb(1.0, 0.2, 0.2),
+            emissive: LinearRgba::new(15.0, 3.0, 3.0, 1.0),
+            ..default()
+        })),
         Transform::from_xyz(pos.x, pos.y, pos.z + 0.5),
         EnemyBullet,
         Velocity(Vec3::new(0.0, 0.0, ENEMY_BULLET_SPEED)),

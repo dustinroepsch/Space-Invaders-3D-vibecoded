@@ -14,6 +14,20 @@ pub struct Bullet;
 #[derive(Component)]
 pub struct EnemyBullet;
 
+#[derive(Component)]
+pub struct EnemyRow(pub usize);
+
+#[derive(Component)]
+pub struct ExplosionParticle;
+
+#[derive(Component)]
+pub struct TrailParticle;
+
+#[derive(Component)]
+pub struct Lifetime {
+    pub timer: Timer,
+}
+
 // --- Physics ---
 
 #[derive(Component)]
