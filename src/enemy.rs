@@ -2,7 +2,7 @@ use bevy::prelude::*;
 use rand::Rng;
 
 use crate::components::*;
-use crate::effects::row_color;
+use crate::effects::{row_color, row_emissive};
 
 pub struct EnemyPlugin;
 
@@ -10,32 +10,26 @@ impl Plugin for EnemyPlugin {
     fn build(&self, app: &mut App) {
         app.init_resource::<EnemyDirection>()
             .init_resource::<EnemyShootTimer>()
-            .add_systems(Startup, spawn_enemies)
+            .init_resource::<EnemySpeed>()
+            .init_resource::<CurrentWave>()
+            .add_systems(OnEnter(GameState::Playing), setup_wave)
             .add_systems(
                 Update,
-                (enemy_movement, enemy_shoot).run_if(in_state(GameState::Playing)),
+                (enemy_movement, enemy_shoot, check_wave_cleared)
+                    .run_if(in_state(GameState::Playing)),
             );
     }
 }
 
-fn row_emissive(row: usize) -> LinearRgba {
-    match row {
-        0 => LinearRgba::new(5.0, 1.0, 1.0, 1.0),
-        1 => LinearRgba::new(5.0, 3.0, 0.5, 1.0),
-        2 => LinearRgba::new(1.0, 5.0, 1.5, 1.0),
-        _ => LinearRgba::new(3.5, 1.0, 5.0, 1.0),
-    }
-}
-
-fn spawn_enemies(
-    mut commands: Commands,
-    mut meshes: ResMut<Assets<Mesh>>,
-    mut materials: ResMut<Assets<StandardMaterial>>,
+pub fn spawn_enemy_wave(
+    commands: &mut Commands,
+    meshes: &mut ResMut<Assets<Mesh>>,
+    materials: &mut ResMut<Assets<StandardMaterial>>,
+    config: &WaveConfig,
 ) {
     let mesh = meshes.add(Cuboid::new(0.8, 0.8, 0.8));
 
-    // Create a material per row
-    let row_materials: Vec<Handle<StandardMaterial>> = (0..ENEMY_ROWS)
+    let row_materials: Vec<Handle<StandardMaterial>> = (0..config.rows)
         .map(|row| {
             materials.add(StandardMaterial {
                 base_color: row_color(row),
@@ -47,13 +41,13 @@ fn spawn_enemies(
         })
         .collect();
 
-    let grid_width = (ENEMY_COLS - 1) as f32 * ENEMY_SPACING;
+    let grid_width = (config.cols - 1) as f32 * ENEMY_SPACING;
     let start_x = -grid_width / 2.0;
 
     for (row, row_mat) in row_materials.iter().enumerate() {
-        for col in 0..ENEMY_COLS {
+        for col in 0..config.cols {
             let x = start_x + col as f32 * ENEMY_SPACING;
-            let z = ENEMY_START_Z - row as f32 * ENEMY_SPACING;
+            let z = (ENEMY_START_Z + config.z_offset) - row as f32 * ENEMY_SPACING;
 
             commands.spawn((
                 Mesh3d(mesh.clone()),
@@ -66,12 +60,46 @@ fn spawn_enemies(
     }
 }
 
+fn setup_wave(
+    mut commands: Commands,
+    mut meshes: ResMut<Assets<Mesh>>,
+    mut materials: ResMut<Assets<StandardMaterial>>,
+    current_wave: Res<CurrentWave>,
+    mut enemy_speed: ResMut<EnemySpeed>,
+    mut shoot_timer: ResMut<EnemyShootTimer>,
+    mut enemy_dir: ResMut<EnemyDirection>,
+) {
+    let config = wave_config(current_wave.wave);
+
+    enemy_speed.speed = config.speed;
+    shoot_timer.timer = Timer::from_seconds(config.shoot_interval, TimerMode::Repeating);
+    enemy_dir.dir = 1.0;
+
+    spawn_enemy_wave(&mut commands, &mut meshes, &mut materials, &config);
+}
+
+fn check_wave_cleared(
+    mut next_state: ResMut<NextState<GameState>>,
+    current_wave: Res<CurrentWave>,
+    enemies: Query<(), With<Enemy>>,
+) {
+    if !enemies.is_empty() {
+        return;
+    }
+
+    if current_wave.wave >= 10 {
+        next_state.set(GameState::Victory);
+    } else {
+        next_state.set(GameState::WaveTransition);
+    }
+}
+
 fn enemy_movement(
     time: Res<Time>,
+    enemy_speed: Res<EnemySpeed>,
     mut direction: ResMut<EnemyDirection>,
     mut query: Query<&mut Transform, With<Enemy>>,
 ) {
-    // Check if any enemy has hit the boundary
     let mut should_reverse = false;
     for transform in &query {
         let x = transform.translation.x;
@@ -89,7 +117,7 @@ fn enemy_movement(
             transform.translation.z += ENEMY_STEP_DOWN;
         }
     } else {
-        let dx = direction.dir * ENEMY_SPEED * time.delta_secs();
+        let dx = direction.dir * enemy_speed.speed * time.delta_secs();
         for mut transform in &mut query {
             transform.translation.x += dx;
         }

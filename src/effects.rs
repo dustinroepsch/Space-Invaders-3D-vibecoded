@@ -73,7 +73,7 @@ pub fn spawn_explosion(
     }
 }
 
-fn row_emissive(row: usize) -> LinearRgba {
+pub fn row_emissive(row: usize) -> LinearRgba {
     match row {
         0 => LinearRgba::new(10.0, 2.0, 2.0, 1.0),
         1 => LinearRgba::new(10.0, 6.0, 1.0, 1.0),

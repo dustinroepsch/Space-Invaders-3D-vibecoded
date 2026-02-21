@@ -1,6 +1,7 @@
 use bevy::prelude::*;
 
 use crate::components::*;
+use crate::player::spawn_player_ship;
 
 pub struct ScoreboardPlugin;
 
@@ -8,10 +9,21 @@ impl Plugin for ScoreboardPlugin {
     fn build(&self, app: &mut App) {
         app.add_systems(Startup, spawn_scoreboard)
             .add_systems(Update, update_scoreboard)
+            // Game Over
             .add_systems(OnEnter(GameState::GameOver), show_game_over)
+            .add_systems(Update, restart_game.run_if(in_state(GameState::GameOver)))
+            // Wave Transition
+            .add_systems(OnEnter(GameState::WaveTransition), show_wave_transition)
             .add_systems(
                 Update,
-                restart_game.run_if(in_state(GameState::GameOver)),
+                wave_transition_tick.run_if(in_state(GameState::WaveTransition)),
+            )
+            .add_systems(OnExit(GameState::WaveTransition), cleanup_wave_transition)
+            // Victory
+            .add_systems(OnEnter(GameState::Victory), show_victory)
+            .add_systems(
+                Update,
+                restart_from_victory.run_if(in_state(GameState::Victory)),
             );
     }
 }
@@ -24,7 +36,7 @@ struct GameOverUI;
 
 fn spawn_scoreboard(mut commands: Commands) {
     commands.spawn((
-        Text::new("Score: 0"),
+        Text::new("Wave 1 | Score: 0"),
         TextFont {
             font_size: 36.0,
             ..default()
@@ -40,17 +52,20 @@ fn spawn_scoreboard(mut commands: Commands) {
     ));
 }
 
-fn update_scoreboard(score: Res<Score>, mut query: Query<&mut Text, With<ScoreText>>) {
-    if !score.is_changed() {
+fn update_scoreboard(
+    score: Res<Score>,
+    current_wave: Res<CurrentWave>,
+    mut query: Query<&mut Text, With<ScoreText>>,
+) {
+    if !score.is_changed() && !current_wave.is_changed() {
         return;
     }
     for mut text in &mut query {
-        **text = format!("Score: {}", score.value);
+        **text = format!("Wave {} | Score: {}", current_wave.wave, score.value);
     }
 }
 
-fn show_game_over(mut commands: Commands) {
-    // Full-screen centered overlay container
+fn show_game_over(mut commands: Commands, score: Res<Score>) {
     commands
         .spawn((
             Node {
@@ -68,7 +83,6 @@ fn show_game_over(mut commands: Commands) {
             GameOverUI,
         ))
         .with_children(|parent| {
-            // GAME OVER text
             parent.spawn((
                 Text::new("GAME OVER"),
                 TextFont {
@@ -77,7 +91,18 @@ fn show_game_over(mut commands: Commands) {
                 },
                 TextColor(Color::srgb(1.0, 0.2, 0.2)),
             ));
-            // Restart prompt
+            parent.spawn((
+                Text::new(format!("Final Score: {}", score.value)),
+                TextFont {
+                    font_size: 40.0,
+                    ..default()
+                },
+                TextColor(Color::srgb(0.9, 0.9, 0.5)),
+                Node {
+                    margin: UiRect::top(Val::Px(10.0)),
+                    ..default()
+                },
+            ));
             parent.spawn((
                 Text::new("Press SPACE to restart"),
                 TextFont {
@@ -101,7 +126,7 @@ fn restart_game(
     mut score: ResMut<Score>,
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<StandardMaterial>>,
-    mut enemy_dir: ResMut<EnemyDirection>,
+    mut current_wave: ResMut<CurrentWave>,
     game_over_ui: Query<Entity, With<GameOverUI>>,
     enemies: Query<Entity, With<Enemy>>,
     bullets: Query<Entity, With<Bullet>>,
@@ -139,98 +164,210 @@ fn restart_game(
         commands.entity(entity).despawn();
     }
 
-    // Reset score and direction
+    // Reset score, wave, and respawn player
     score.value = 0;
-    enemy_dir.dir = 1.0;
+    current_wave.wave = 1;
 
-    // Respawn player
-    let body_mat = materials.add(StandardMaterial {
-        base_color: Color::srgb(0.15, 0.3, 0.9),
-        metallic: 0.9,
-        perceptual_roughness: 0.2,
-        emissive: LinearRgba::new(0.3, 0.5, 2.0, 1.0),
-        ..default()
+    spawn_player_ship(&mut commands, &mut meshes, &mut materials);
+
+    // Transition back to playing — OnEnter(Playing) will spawn enemies
+    next_state.set(GameState::Playing);
+}
+
+// --- Wave Transition ---
+
+fn show_wave_transition(mut commands: Commands, current_wave: Res<CurrentWave>) {
+    let next_wave = current_wave.wave + 1;
+
+    commands.insert_resource(WaveTransitionTimer {
+        timer: Timer::from_seconds(2.0, TimerMode::Once),
     });
-    let wing_mat = materials.add(StandardMaterial {
-        base_color: Color::srgba(0.1, 0.15, 0.6, 0.85),
-        metallic: 0.7,
-        perceptual_roughness: 0.3,
-        alpha_mode: AlphaMode::Blend,
-        ..default()
-    });
-    let cockpit_mat = materials.add(StandardMaterial {
-        base_color: Color::srgb(0.2, 0.9, 1.0),
-        emissive: LinearRgba::new(2.0, 8.0, 10.0, 1.0),
-        ..default()
-    });
-    let body_mesh = meshes.add(Cuboid::new(0.6, 0.4, 1.0));
-    let wing_mesh = meshes.add(Cuboid::new(0.5, 0.1, 0.6));
-    let cockpit_mesh = meshes.add(Cuboid::new(0.2, 0.2, 0.3));
 
     commands
         .spawn((
-            Mesh3d(body_mesh),
-            MeshMaterial3d(body_mat),
-            Transform::from_xyz(0.0, PLAYER_Y, PLAYER_Z),
-            Player,
+            Node {
+                width: Val::Percent(100.0),
+                height: Val::Percent(100.0),
+                position_type: PositionType::Absolute,
+                top: Val::Px(0.0),
+                left: Val::Px(0.0),
+                justify_content: JustifyContent::Center,
+                align_items: AlignItems::Center,
+                flex_direction: FlexDirection::Column,
+                ..default()
+            },
+            BackgroundColor(Color::srgba(0.0, 0.0, 0.0, 0.5)),
+            WaveTransitionUI,
         ))
         .with_children(|parent| {
             parent.spawn((
-                Mesh3d(wing_mesh.clone()),
-                MeshMaterial3d(wing_mat.clone()),
-                Transform::from_xyz(-0.5, -0.05, 0.1),
+                Text::new(format!("Wave {}", next_wave)),
+                TextFont {
+                    font_size: 80.0,
+                    ..default()
+                },
+                TextColor(Color::srgb(0.3, 0.9, 1.0)),
             ));
             parent.spawn((
-                Mesh3d(wing_mesh),
-                MeshMaterial3d(wing_mat),
-                Transform::from_xyz(0.5, -0.05, 0.1),
-            ));
-            parent.spawn((
-                Mesh3d(cockpit_mesh),
-                MeshMaterial3d(cockpit_mat),
-                Transform::from_xyz(0.0, 0.25, -0.2),
+                Text::new("Get Ready!"),
+                TextFont {
+                    font_size: 36.0,
+                    ..default()
+                },
+                TextColor(Color::srgb(0.7, 0.8, 0.9)),
+                Node {
+                    margin: UiRect::top(Val::Px(15.0)),
+                    ..default()
+                },
             ));
         });
+}
 
-    // Respawn enemies
-    let enemy_mesh = meshes.add(Cuboid::new(0.8, 0.8, 0.8));
-    let row_materials: Vec<Handle<StandardMaterial>> = (0..ENEMY_ROWS)
-        .map(|row| {
-            let color = crate::effects::row_color(row);
-            let emissive = match row {
-                0 => LinearRgba::new(5.0, 1.0, 1.0, 1.0),
-                1 => LinearRgba::new(5.0, 3.0, 0.5, 1.0),
-                2 => LinearRgba::new(1.0, 5.0, 1.5, 1.0),
-                _ => LinearRgba::new(3.5, 1.0, 5.0, 1.0),
-            };
-            materials.add(StandardMaterial {
-                base_color: color,
-                emissive,
-                metallic: 0.5,
-                perceptual_roughness: 0.4,
+fn wave_transition_tick(
+    time: Res<Time>,
+    mut timer: ResMut<WaveTransitionTimer>,
+    mut current_wave: ResMut<CurrentWave>,
+    mut next_state: ResMut<NextState<GameState>>,
+) {
+    timer.timer.tick(time.delta());
+
+    if timer.timer.just_finished() {
+        current_wave.wave += 1;
+        next_state.set(GameState::Playing);
+    }
+}
+
+fn cleanup_wave_transition(
+    mut commands: Commands,
+    transition_ui: Query<Entity, With<WaveTransitionUI>>,
+    bullets: Query<Entity, With<Bullet>>,
+    enemy_bullets: Query<Entity, With<EnemyBullet>>,
+    explosions: Query<Entity, With<ExplosionParticle>>,
+    trails: Query<Entity, With<TrailParticle>>,
+) {
+    for entity in &transition_ui {
+        commands.entity(entity).despawn();
+    }
+    for entity in &bullets {
+        commands.entity(entity).despawn();
+    }
+    for entity in &enemy_bullets {
+        commands.entity(entity).despawn();
+    }
+    for entity in &explosions {
+        commands.entity(entity).despawn();
+    }
+    for entity in &trails {
+        commands.entity(entity).despawn();
+    }
+}
+
+// --- Victory ---
+
+fn show_victory(mut commands: Commands, score: Res<Score>) {
+    commands
+        .spawn((
+            Node {
+                width: Val::Percent(100.0),
+                height: Val::Percent(100.0),
+                position_type: PositionType::Absolute,
+                top: Val::Px(0.0),
+                left: Val::Px(0.0),
+                justify_content: JustifyContent::Center,
+                align_items: AlignItems::Center,
+                flex_direction: FlexDirection::Column,
                 ..default()
-            })
-        })
-        .collect();
-
-    let grid_width = (ENEMY_COLS - 1) as f32 * ENEMY_SPACING;
-    let start_x = -grid_width / 2.0;
-
-    for (row, row_mat) in row_materials.iter().enumerate() {
-        for col in 0..ENEMY_COLS {
-            let x = start_x + col as f32 * ENEMY_SPACING;
-            let z = ENEMY_START_Z - row as f32 * ENEMY_SPACING;
-
-            commands.spawn((
-                Mesh3d(enemy_mesh.clone()),
-                MeshMaterial3d(row_mat.clone()),
-                Transform::from_xyz(x, ENEMY_START_Y, z),
-                Enemy,
-                EnemyRow(row),
+            },
+            BackgroundColor(Color::srgba(0.0, 0.0, 0.05, 0.8)),
+            VictoryUI,
+        ))
+        .with_children(|parent| {
+            parent.spawn((
+                Text::new("YOU WIN!"),
+                TextFont {
+                    font_size: 90.0,
+                    ..default()
+                },
+                TextColor(Color::srgb(1.0, 0.85, 0.2)),
             ));
-        }
+            parent.spawn((
+                Text::new(format!("Final Score: {}", score.value)),
+                TextFont {
+                    font_size: 44.0,
+                    ..default()
+                },
+                TextColor(Color::srgb(0.9, 0.9, 0.5)),
+                Node {
+                    margin: UiRect::top(Val::Px(15.0)),
+                    ..default()
+                },
+            ));
+            parent.spawn((
+                Text::new("Press SPACE to play again"),
+                TextFont {
+                    font_size: 30.0,
+                    ..default()
+                },
+                TextColor(Color::srgb(0.7, 0.7, 0.8)),
+                Node {
+                    margin: UiRect::top(Val::Px(25.0)),
+                    ..default()
+                },
+            ));
+        });
+}
+
+#[allow(clippy::too_many_arguments)]
+fn restart_from_victory(
+    mut commands: Commands,
+    keyboard: Res<ButtonInput<KeyCode>>,
+    mut next_state: ResMut<NextState<GameState>>,
+    mut score: ResMut<Score>,
+    mut meshes: ResMut<Assets<Mesh>>,
+    mut materials: ResMut<Assets<StandardMaterial>>,
+    mut current_wave: ResMut<CurrentWave>,
+    victory_ui: Query<Entity, With<VictoryUI>>,
+    enemies: Query<Entity, With<Enemy>>,
+    bullets: Query<Entity, With<Bullet>>,
+    enemy_bullets: Query<Entity, With<EnemyBullet>>,
+    player: Query<Entity, With<Player>>,
+    explosions: Query<Entity, With<ExplosionParticle>>,
+    trails: Query<Entity, With<TrailParticle>>,
+) {
+    if !keyboard.just_pressed(KeyCode::Space) {
+        return;
     }
 
-    // Transition back to playing
+    // Despawn victory UI
+    for entity in &victory_ui {
+        commands.entity(entity).despawn();
+    }
+
+    // Despawn all game entities
+    for entity in &enemies {
+        commands.entity(entity).despawn();
+    }
+    for entity in &bullets {
+        commands.entity(entity).despawn();
+    }
+    for entity in &enemy_bullets {
+        commands.entity(entity).despawn();
+    }
+    for entity in &player {
+        commands.entity(entity).despawn();
+    }
+    for entity in &explosions {
+        commands.entity(entity).despawn();
+    }
+    for entity in &trails {
+        commands.entity(entity).despawn();
+    }
+
+    // Reset everything
+    score.value = 0;
+    current_wave.wave = 1;
+
+    spawn_player_ship(&mut commands, &mut meshes, &mut materials);
+
     next_state.set(GameState::Playing);
 }

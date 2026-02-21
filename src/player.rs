@@ -15,12 +15,11 @@ impl Plugin for PlayerPlugin {
     }
 }
 
-fn spawn_player(
-    mut commands: Commands,
-    mut meshes: ResMut<Assets<Mesh>>,
-    mut materials: ResMut<Assets<StandardMaterial>>,
+pub fn spawn_player_ship(
+    commands: &mut Commands,
+    meshes: &mut ResMut<Assets<Mesh>>,
+    materials: &mut ResMut<Assets<StandardMaterial>>,
 ) {
-    // Body material: metallic blue with emissive glow
     let body_mat = materials.add(StandardMaterial {
         base_color: Color::srgb(0.15, 0.3, 0.9),
         metallic: 0.9,
@@ -29,7 +28,6 @@ fn spawn_player(
         ..default()
     });
 
-    // Wing material: darker blue, slightly transparent
     let wing_mat = materials.add(StandardMaterial {
         base_color: Color::srgba(0.1, 0.15, 0.6, 0.85),
         metallic: 0.7,
@@ -38,7 +36,6 @@ fn spawn_player(
         ..default()
     });
 
-    // Cockpit material: bright cyan emissive
     let cockpit_mat = materials.add(StandardMaterial {
         base_color: Color::srgb(0.2, 0.9, 1.0),
         emissive: LinearRgba::new(2.0, 8.0, 10.0, 1.0),
@@ -57,25 +54,30 @@ fn spawn_player(
             Player,
         ))
         .with_children(|parent| {
-            // Left wing
             parent.spawn((
                 Mesh3d(wing_mesh.clone()),
                 MeshMaterial3d(wing_mat.clone()),
                 Transform::from_xyz(-0.5, -0.05, 0.1),
             ));
-            // Right wing
             parent.spawn((
                 Mesh3d(wing_mesh),
                 MeshMaterial3d(wing_mat),
                 Transform::from_xyz(0.5, -0.05, 0.1),
             ));
-            // Cockpit
             parent.spawn((
                 Mesh3d(cockpit_mesh),
                 MeshMaterial3d(cockpit_mat),
                 Transform::from_xyz(0.0, 0.25, -0.2),
             ));
         });
+}
+
+fn spawn_player(
+    mut commands: Commands,
+    mut meshes: ResMut<Assets<Mesh>>,
+    mut materials: ResMut<Assets<StandardMaterial>>,
+) {
+    spawn_player_ship(&mut commands, &mut meshes, &mut materials);
 }
 
 fn player_movement(
