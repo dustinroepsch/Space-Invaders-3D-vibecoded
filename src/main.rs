@@ -2,6 +2,7 @@ mod barrier;
 mod bullet;
 mod collision;
 mod components;
+mod crt;
 mod effects;
 mod enemy;
 mod mystery;
@@ -13,11 +14,12 @@ use rand::Rng;
 
 use barrier::BarrierPlugin;
 use bullet::BulletPlugin;
-use mystery::MysteryPlugin;
 use collision::CollisionPlugin;
 use components::{GameState, Score};
+use crt::{CrtPlugin, CrtSettings};
 use effects::EffectsPlugin;
 use enemy::EnemyPlugin;
+use mystery::MysteryPlugin;
 use player::PlayerPlugin;
 use scoreboard::ScoreboardPlugin;
 
@@ -35,6 +37,7 @@ fn main() {
             EffectsPlugin,
             BarrierPlugin,
             MysteryPlugin,
+            CrtPlugin,
         ))
         .add_systems(Startup, (setup_scene, spawn_starfield))
         .run();
@@ -49,6 +52,7 @@ fn setup_scene(
     commands.spawn((
         Camera3d::default(),
         Transform::from_xyz(0.0, 15.0, 16.0).looking_at(Vec3::new(0.0, 0.0, 1.0), Vec3::Y),
+        CrtSettings,
     ));
 
     // Directional light
