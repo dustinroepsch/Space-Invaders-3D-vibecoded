@@ -1,3 +1,4 @@
+mod barrier;
 mod bullet;
 mod collision;
 mod components;
@@ -9,6 +10,7 @@ mod scoreboard;
 use bevy::prelude::*;
 use rand::Rng;
 
+use barrier::BarrierPlugin;
 use bullet::BulletPlugin;
 use collision::CollisionPlugin;
 use components::{GameState, Score};
@@ -29,6 +31,7 @@ fn main() {
             CollisionPlugin,
             ScoreboardPlugin,
             EffectsPlugin,
+            BarrierPlugin,
         ))
         .add_systems(Startup, (setup_scene, spawn_starfield))
         .run();

@@ -162,6 +162,11 @@ pub fn wave_config(wave: u32) -> WaveConfig {
 }
 
 #[derive(Component)]
+pub struct Barrier {
+    pub health: u8,
+}
+
+#[derive(Component)]
 pub struct WaveTransitionUI;
 
 #[derive(Component)]
@@ -228,3 +233,9 @@ pub const ENEMY_START_Y: f32 = 0.5;
 
 pub const COLLISION_DISTANCE: f32 = 0.8;
 pub const GAME_OVER_Z: f32 = 7.0;
+
+pub const BARRIER_Z: f32 = 5.5;
+pub const BARRIER_HEALTH: u8 = 2;
+pub const BARRIER_BLOCK_SIZE: f32 = 0.28;
+pub const BARRIER_BLOCK_SPACING: f32 = 0.32;
+pub const BARRIER_COLLISION_DISTANCE: f32 = 0.35;

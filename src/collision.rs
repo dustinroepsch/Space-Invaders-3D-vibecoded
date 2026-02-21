@@ -1,5 +1,6 @@
 use bevy::prelude::*;
 
+use crate::barrier::barrier_material;
 use crate::components::*;
 use crate::effects::spawn_explosion;
 
@@ -13,6 +14,8 @@ impl Plugin for CollisionPlugin {
                 bullet_enemy_collision,
                 enemy_bullet_player_collision,
                 enemy_reaches_bottom,
+                bullet_barrier_collision,
+                enemy_bullet_barrier_collision,
             )
                 .run_if(in_state(GameState::Playing)),
         );
@@ -75,6 +78,60 @@ fn enemy_reaches_bottom(
         if transform.translation.z >= GAME_OVER_Z {
             next_state.set(GameState::GameOver);
             return;
+        }
+    }
+}
+
+fn bullet_barrier_collision(
+    mut commands: Commands,
+    mut materials: ResMut<Assets<StandardMaterial>>,
+    bullets: Query<(Entity, &Transform), With<Bullet>>,
+    mut barriers: Query<(Entity, &Transform, &mut Barrier, &MeshMaterial3d<StandardMaterial>)>,
+) {
+    'bullet: for (bullet_entity, bullet_transform) in &bullets {
+        for (barrier_entity, barrier_transform, mut barrier, mat_handle) in &mut barriers {
+            let dist = bullet_transform
+                .translation
+                .distance(barrier_transform.translation);
+            if dist < BARRIER_COLLISION_DISTANCE {
+                commands.entity(bullet_entity).despawn();
+                if barrier.health <= 1 {
+                    commands.entity(barrier_entity).despawn();
+                } else {
+                    barrier.health -= 1;
+                    if let Some(mat) = materials.get_mut(&mat_handle.0) {
+                        *mat = barrier_material(barrier.health);
+                    }
+                }
+                continue 'bullet;
+            }
+        }
+    }
+}
+
+fn enemy_bullet_barrier_collision(
+    mut commands: Commands,
+    mut materials: ResMut<Assets<StandardMaterial>>,
+    enemy_bullets: Query<(Entity, &Transform), With<EnemyBullet>>,
+    mut barriers: Query<(Entity, &Transform, &mut Barrier, &MeshMaterial3d<StandardMaterial>)>,
+) {
+    'bullet: for (bullet_entity, bullet_transform) in &enemy_bullets {
+        for (barrier_entity, barrier_transform, mut barrier, mat_handle) in &mut barriers {
+            let dist = bullet_transform
+                .translation
+                .distance(barrier_transform.translation);
+            if dist < BARRIER_COLLISION_DISTANCE {
+                commands.entity(bullet_entity).despawn();
+                if barrier.health <= 1 {
+                    commands.entity(barrier_entity).despawn();
+                } else {
+                    barrier.health -= 1;
+                    if let Some(mat) = materials.get_mut(&mat_handle.0) {
+                        *mat = barrier_material(barrier.health);
+                    }
+                }
+                continue 'bullet;
+            }
         }
     }
 }
