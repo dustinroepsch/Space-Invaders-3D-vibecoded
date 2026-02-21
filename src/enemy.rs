@@ -21,41 +21,160 @@ impl Plugin for EnemyPlugin {
     }
 }
 
+// ---------------------------------------------------------------------------
+// Voxel alien definitions
+// ---------------------------------------------------------------------------
+
+const VOXEL_SIZE: f32 = 0.14;
+const VOXEL_STEP: f32 = 0.20;
+
+/// (col_x, height_y, depth_z) integer offsets, each multiplied by VOXEL_STEP.
+/// Positive z = toward player.
+
+// --- Squid (row 0) --- compact square body + tall antennae
+const SQUID_BODY: &[(i8, i8, i8)] = &[
+    (-1, 0, -1), (0, 0, -1), (1, 0, -1),
+    (-1, 0,  0), (0, 0,  0), (1, 0,  0),
+    (-1, 0,  1), (0, 0,  1), (1, 0,  1),
+];
+const SQUID_DETAIL: &[(i8, i8, i8)] = &[
+    // glowing eyes at the back-top corners
+    (-1, 1, -1), (1, 1, -1),
+    // antennae sticking high
+    (-1, 2, -1), (1, 2, -1),
+];
+
+// --- Crab (rows 1–2) --- wide with side claws
+const CRAB_BODY: &[(i8, i8, i8)] = &[
+    // narrow back row
+    (-1, 0, -1), (0, 0, -1), (1, 0, -1),
+    // wide middle row
+    (-2, 0, 0), (-1, 0, 0), (0, 0, 0), (1, 0, 0), (2, 0, 0),
+    // narrow front row
+    (-1, 0,  1), (0, 0,  1), (1, 0,  1),
+    // extending claw tips
+    (-3, 0, 0), (3, 0, 0),
+];
+const CRAB_DETAIL: &[(i8, i8, i8)] = &[
+    // eyes
+    (-1, 1, -1), (1, 1, -1),
+    // raised carapace centre
+    (0, 1, 0),
+];
+
+// --- Octopus (rows 3+) --- large oval body with a dome
+const OCTOPUS_BODY: &[(i8, i8, i8)] = &[
+    // wide oval body
+    (-2, 0, -1), (-1, 0, -1), (0, 0, -1), (1, 0, -1), (2, 0, -1),
+    (-2, 0,  0), (-1, 0,  0), (0, 0,  0), (1, 0,  0), (2, 0,  0),
+    (-1, 0,  1), (0, 0,  1), (1, 0,  1),
+    // dome
+    (-1, 1, -1), (0, 1, -1), (1, 1, -1),
+    (-1, 1,  0), (0, 1,  0), (1, 1,  0),
+];
+const OCTOPUS_DETAIL: &[(i8, i8, i8)] = &[
+    // raised eyes on top of dome
+    (-1, 2, 0), (1, 2, 0),
+    // tentacle bumps at the front corners
+    (-2, 0, 1), (2, 0, 1),
+];
+
+fn alien_type_for_row(row: usize) -> usize {
+    match row {
+        0 => 0,     // squid
+        1 | 2 => 1, // crab
+        _ => 2,     // octopus
+    }
+}
+
+/// Contrasting eye/detail colour per row.
+fn detail_color(row: usize) -> (Color, LinearRgba) {
+    match row % 4 {
+        0 => (Color::srgb(1.0, 0.95, 0.2), LinearRgba::new(8.0, 7.0, 1.0, 1.0)), // yellow
+        1 => (Color::srgb(0.2, 0.9, 1.0),  LinearRgba::new(1.0, 7.0, 10.0, 1.0)), // cyan
+        2 => (Color::srgb(1.0, 0.3, 1.0),  LinearRgba::new(8.0, 1.0, 8.0, 1.0)),  // magenta
+        _ => (Color::srgb(0.9, 1.0, 0.4),  LinearRgba::new(6.0, 8.0, 1.0, 1.0)),  // lime
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Wave spawning
+// ---------------------------------------------------------------------------
+
 pub fn spawn_enemy_wave(
     commands: &mut Commands,
     meshes: &mut ResMut<Assets<Mesh>>,
     materials: &mut ResMut<Assets<StandardMaterial>>,
     config: &WaveConfig,
 ) {
-    let mesh = meshes.add(Cuboid::new(0.8, 0.8, 0.8));
-
-    let row_materials: Vec<Handle<StandardMaterial>> = (0..config.rows)
-        .map(|row| {
-            materials.add(StandardMaterial {
-                base_color: row_color(row),
-                emissive: row_emissive(row),
-                metallic: 0.5,
-                perceptual_roughness: 0.4,
-                ..default()
-            })
-        })
-        .collect();
+    let voxel_mesh = meshes.add(Cuboid::new(VOXEL_SIZE, VOXEL_SIZE, VOXEL_SIZE));
 
     let grid_width = (config.cols - 1) as f32 * ENEMY_SPACING;
     let start_x = -grid_width / 2.0;
 
-    for (row, row_mat) in row_materials.iter().enumerate() {
+    for row in 0..config.rows {
+        let body_mat = materials.add(StandardMaterial {
+            base_color: row_color(row),
+            emissive: row_emissive(row),
+            metallic: 0.6,
+            perceptual_roughness: 0.3,
+            ..default()
+        });
+        let (dc, de) = detail_color(row);
+        let detail_mat = materials.add(StandardMaterial {
+            base_color: dc,
+            emissive: de,
+            metallic: 0.2,
+            perceptual_roughness: 0.2,
+            ..default()
+        });
+
+        let alien_type = alien_type_for_row(row);
+        let (body_voxels, detail_voxels): (&[(i8, i8, i8)], &[(i8, i8, i8)]) = match alien_type {
+            0 => (SQUID_BODY, SQUID_DETAIL),
+            1 => (CRAB_BODY, CRAB_DETAIL),
+            _ => (OCTOPUS_BODY, OCTOPUS_DETAIL),
+        };
+
         for col in 0..config.cols {
             let x = start_x + col as f32 * ENEMY_SPACING;
             let z = (ENEMY_START_Z + config.z_offset) - row as f32 * ENEMY_SPACING;
 
-            commands.spawn((
-                Mesh3d(mesh.clone()),
-                MeshMaterial3d(row_mat.clone()),
-                Transform::from_xyz(x, ENEMY_START_Y, z),
-                Enemy,
-                EnemyRow(row),
-            ));
+            let bm = body_mat.clone();
+            let dm = detail_mat.clone();
+            let vm = voxel_mesh.clone();
+
+            commands
+                .spawn((
+                    Transform::from_xyz(x, ENEMY_START_Y, z),
+                    Visibility::default(),
+                    Enemy,
+                    EnemyRow(row),
+                ))
+                .with_children(|parent| {
+                    for &(cx, cy, cz) in body_voxels {
+                        parent.spawn((
+                            Mesh3d(vm.clone()),
+                            MeshMaterial3d(bm.clone()),
+                            Transform::from_xyz(
+                                cx as f32 * VOXEL_STEP,
+                                cy as f32 * VOXEL_STEP,
+                                cz as f32 * VOXEL_STEP,
+                            ),
+                        ));
+                    }
+                    for &(cx, cy, cz) in detail_voxels {
+                        parent.spawn((
+                            Mesh3d(vm.clone()),
+                            MeshMaterial3d(dm.clone()),
+                            Transform::from_xyz(
+                                cx as f32 * VOXEL_STEP,
+                                cy as f32 * VOXEL_STEP,
+                                cz as f32 * VOXEL_STEP,
+                            ),
+                        ));
+                    }
+                });
         }
     }
 }
