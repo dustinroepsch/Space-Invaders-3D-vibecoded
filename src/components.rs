@@ -167,10 +167,51 @@ pub struct Barrier {
 }
 
 #[derive(Component)]
+pub struct MysteryShip;
+
+/// Bonus points awarded when this mystery ship is destroyed.
+#[derive(Component)]
+pub struct MysteryShipPoints(pub u32);
+
+/// Fired when a mystery ship is destroyed.
+#[derive(Message, Clone)]
+pub struct MysteryShipKilledEvent {
+    pub points: u32,
+    pub world_pos: Vec3,
+}
+
+/// Floating score popup that rises and fades after a mystery ship kill.
+#[derive(Component)]
+pub struct ScorePopup {
+    pub timer: Timer,
+    pub start_top: f32,
+}
+
+#[derive(Component)]
 pub struct WaveTransitionUI;
 
 #[derive(Component)]
 pub struct VictoryUI;
+
+// --- Mystery Ship ---
+
+#[derive(Resource)]
+pub struct MysteryShipTimer {
+    pub timer: Timer,
+}
+
+impl Default for MysteryShipTimer {
+    fn default() -> Self {
+        Self {
+            timer: Timer::from_seconds(20.0, TimerMode::Repeating),
+        }
+    }
+}
+
+pub const MYSTERY_SHIP_Z: f32 = -7.5;
+pub const MYSTERY_SHIP_Y: f32 = 0.5;
+pub const MYSTERY_SHIP_SPEED: f32 = 7.0;
+pub const MYSTERY_SHIP_COLLISION_DISTANCE: f32 = 1.2;
 
 // --- Timers ---
 

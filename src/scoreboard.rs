@@ -134,6 +134,7 @@ fn restart_game(
     player: Query<Entity, With<Player>>,
     explosions: Query<Entity, With<ExplosionParticle>>,
     trails: Query<Entity, With<TrailParticle>>,
+    score_popups: Query<Entity, With<ScorePopup>>,
 ) {
     if !keyboard.just_pressed(KeyCode::Space) {
         return;
@@ -161,6 +162,9 @@ fn restart_game(
         commands.entity(entity).despawn();
     }
     for entity in &trails {
+        commands.entity(entity).despawn();
+    }
+    for entity in &score_popups {
         commands.entity(entity).despawn();
     }
 
@@ -333,6 +337,7 @@ fn restart_from_victory(
     player: Query<Entity, With<Player>>,
     explosions: Query<Entity, With<ExplosionParticle>>,
     trails: Query<Entity, With<TrailParticle>>,
+    score_popups: Query<Entity, With<ScorePopup>>,
 ) {
     if !keyboard.just_pressed(KeyCode::Space) {
         return;
@@ -360,6 +365,9 @@ fn restart_from_victory(
         commands.entity(entity).despawn();
     }
     for entity in &trails {
+        commands.entity(entity).despawn();
+    }
+    for entity in &score_popups {
         commands.entity(entity).despawn();
     }
 

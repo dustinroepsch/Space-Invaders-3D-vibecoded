@@ -16,6 +16,7 @@ impl Plugin for CollisionPlugin {
                 enemy_reaches_bottom,
                 bullet_barrier_collision,
                 enemy_bullet_barrier_collision,
+                bullet_mystery_ship_collision,
             )
                 .run_if(in_state(GameState::Playing)),
         );
@@ -131,6 +132,43 @@ fn enemy_bullet_barrier_collision(
                     }
                 }
                 continue 'bullet;
+            }
+        }
+    }
+}
+
+fn bullet_mystery_ship_collision(
+    mut commands: Commands,
+    mut score: ResMut<Score>,
+    mut events: MessageWriter<MysteryShipKilledEvent>,
+    mut meshes: ResMut<Assets<Mesh>>,
+    mut materials: ResMut<Assets<StandardMaterial>>,
+    bullets: Query<(Entity, &Transform), With<Bullet>>,
+    ships: Query<(Entity, &Transform, &MysteryShipPoints), With<MysteryShip>>,
+) {
+    for (bullet_entity, bullet_transform) in &bullets {
+        for (ship_entity, ship_transform, points) in &ships {
+            let dist = bullet_transform
+                .translation
+                .distance(ship_transform.translation);
+            if dist < MYSTERY_SHIP_COLLISION_DISTANCE {
+                let pos = ship_transform.translation;
+                score.value += points.0;
+                events.write(MysteryShipKilledEvent {
+                    points: points.0,
+                    world_pos: pos,
+                });
+                commands.entity(bullet_entity).despawn();
+                commands.entity(ship_entity).despawn();
+                spawn_explosion(&mut commands, &mut meshes, &mut materials, pos, 0);
+                spawn_explosion(
+                    &mut commands,
+                    &mut meshes,
+                    &mut materials,
+                    pos + Vec3::new(0.0, 0.35, 0.0),
+                    2,
+                );
+                break;
             }
         }
     }

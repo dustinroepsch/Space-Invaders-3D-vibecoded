@@ -4,6 +4,7 @@ mod collision;
 mod components;
 mod effects;
 mod enemy;
+mod mystery;
 mod player;
 mod scoreboard;
 
@@ -12,6 +13,7 @@ use rand::Rng;
 
 use barrier::BarrierPlugin;
 use bullet::BulletPlugin;
+use mystery::MysteryPlugin;
 use collision::CollisionPlugin;
 use components::{GameState, Score};
 use effects::EffectsPlugin;
@@ -32,6 +34,7 @@ fn main() {
             ScoreboardPlugin,
             EffectsPlugin,
             BarrierPlugin,
+            MysteryPlugin,
         ))
         .add_systems(Startup, (setup_scene, spawn_starfield))
         .run();
