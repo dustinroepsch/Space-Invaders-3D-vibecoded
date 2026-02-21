@@ -1,6 +1,7 @@
 use bevy::prelude::*;
 
 use crate::components::*;
+use crate::sound::{SoundKind, SoundQueue};
 
 pub struct PlayerPlugin;
 
@@ -112,6 +113,7 @@ fn player_shoot(
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<StandardMaterial>>,
     query: Query<&Transform, With<Player>>,
+    mut sound_queue: ResMut<SoundQueue>,
 ) {
     cooldown.timer.tick(time.delta());
 
@@ -133,6 +135,7 @@ fn player_shoot(
             Velocity(Vec3::new(0.0, 0.0, -BULLET_SPEED)),
         ));
 
+        sound_queue.0.push(SoundKind::PlayerShoot);
         cooldown.timer.reset();
     }
 }

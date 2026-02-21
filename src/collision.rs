@@ -3,6 +3,7 @@ use bevy::prelude::*;
 use crate::barrier::barrier_material;
 use crate::components::*;
 use crate::effects::spawn_explosion;
+use crate::sound::{SoundKind, SoundQueue};
 
 pub struct CollisionPlugin;
 
@@ -30,6 +31,7 @@ fn bullet_enemy_collision(
     mut materials: ResMut<Assets<StandardMaterial>>,
     bullets: Query<(Entity, &Transform), With<Bullet>>,
     enemies: Query<(Entity, &Transform, &EnemyRow), With<Enemy>>,
+    mut sound_queue: ResMut<SoundQueue>,
 ) {
     for (bullet_entity, bullet_transform) in &bullets {
         for (enemy_entity, enemy_transform, enemy_row) in &enemies {
@@ -43,6 +45,7 @@ fn bullet_enemy_collision(
                 commands.entity(enemy_entity).despawn();
                 score.value += 10;
                 spawn_explosion(&mut commands, &mut meshes, &mut materials, pos, row);
+                sound_queue.0.push(SoundKind::EnemyDie);
                 break;
             }
         }
@@ -54,6 +57,7 @@ fn enemy_bullet_player_collision(
     mut next_state: ResMut<NextState<GameState>>,
     enemy_bullets: Query<(Entity, &Transform), With<EnemyBullet>>,
     players: Query<&Transform, With<Player>>,
+    mut sound_queue: ResMut<SoundQueue>,
 ) {
     let Ok(player_transform) = players.single() else {
         return;
@@ -65,6 +69,7 @@ fn enemy_bullet_player_collision(
             .distance(player_transform.translation);
         if distance < COLLISION_DISTANCE {
             commands.entity(bullet_entity).despawn();
+            sound_queue.0.push(SoundKind::PlayerDie);
             next_state.set(GameState::GameOver);
             return;
         }
@@ -145,6 +150,7 @@ fn bullet_mystery_ship_collision(
     mut materials: ResMut<Assets<StandardMaterial>>,
     bullets: Query<(Entity, &Transform), With<Bullet>>,
     ships: Query<(Entity, &Transform, &MysteryShipPoints), With<MysteryShip>>,
+    mut sound_queue: ResMut<SoundQueue>,
 ) {
     for (bullet_entity, bullet_transform) in &bullets {
         for (ship_entity, ship_transform, points) in &ships {
@@ -168,6 +174,7 @@ fn bullet_mystery_ship_collision(
                     pos + Vec3::new(0.0, 0.35, 0.0),
                     2,
                 );
+                sound_queue.0.push(SoundKind::MysteryShipDie);
                 break;
             }
         }

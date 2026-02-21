@@ -8,6 +8,7 @@ mod enemy;
 mod mystery;
 mod player;
 mod scoreboard;
+mod sound;
 
 use bevy::prelude::*;
 use rand::Rng;
@@ -22,10 +23,21 @@ use enemy::EnemyPlugin;
 use mystery::MysteryPlugin;
 use player::PlayerPlugin;
 use scoreboard::ScoreboardPlugin;
+use sound::SoundPlugin;
 
 fn main() {
     App::new()
-        .add_plugins(DefaultPlugins)
+        .add_plugins(DefaultPlugins.set(WindowPlugin {
+            primary_window: Some(Window {
+                title: "Invaders 3D".into(),
+                // On web: fill the browser tab. On desktop: ignored.
+                fit_canvas_to_parent: true,
+                // Prevent the browser from consuming Space/Arrow keys etc.
+                prevent_default_event_handling: true,
+                ..default()
+            }),
+            ..default()
+        }))
         .init_state::<GameState>()
         .init_resource::<Score>()
         .add_plugins((
@@ -38,6 +50,7 @@ fn main() {
             BarrierPlugin,
             MysteryPlugin,
             CrtPlugin,
+            SoundPlugin,
         ))
         .add_systems(Startup, (setup_scene, spawn_starfield))
         .run();

@@ -3,6 +3,7 @@ use rand::Rng;
 
 use crate::components::*;
 use crate::effects::{row_color, row_emissive};
+use crate::sound::{SoundKind, SoundQueue};
 
 pub struct EnemyPlugin;
 
@@ -201,11 +202,13 @@ fn check_wave_cleared(
     mut next_state: ResMut<NextState<GameState>>,
     current_wave: Res<CurrentWave>,
     enemies: Query<(), With<Enemy>>,
+    mut sound_queue: ResMut<SoundQueue>,
 ) {
     if !enemies.is_empty() {
         return;
     }
 
+    sound_queue.0.push(SoundKind::WaveCleared);
     if current_wave.wave >= 10 {
         next_state.set(GameState::Victory);
     } else {
@@ -250,6 +253,7 @@ fn enemy_shoot(
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<StandardMaterial>>,
     query: Query<&Transform, With<Enemy>>,
+    mut sound_queue: ResMut<SoundQueue>,
 ) {
     timer.timer.tick(time.delta());
 
@@ -277,4 +281,6 @@ fn enemy_shoot(
         EnemyBullet,
         Velocity(Vec3::new(0.0, 0.0, ENEMY_BULLET_SPEED)),
     ));
+
+    sound_queue.0.push(SoundKind::EnemyShoot);
 }

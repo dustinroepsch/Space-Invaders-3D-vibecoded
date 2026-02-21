@@ -1,0 +1,9 @@
+[build]
+# Entry point for the web build
+target = "index.html"
+# Enable WebGL2 so the game runs in any modern browser
+features = ["webgl2"]
+
+[serve]
+port = 8080
+open = false
