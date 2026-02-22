@@ -130,7 +130,14 @@ fn init_crt_pipeline(
     );
 
     let sampler = render_device.create_sampler(&SamplerDescriptor::default());
-    let shader = asset_server.load("shaders/crt.wgsl");
+
+    // Embed the WGSL source at compile time — works in release builds with no
+    // dependency on the `assets/` folder being present next to the executable.
+    let shader = asset_server.add(Shader::from_wgsl(
+        include_str!("../assets/shaders/crt.wgsl"),
+        "shaders/crt.wgsl",
+    ));
+
     let vertex_state = fullscreen_shader.to_vertex_state();
 
     let pipeline_id = pipeline_cache.queue_render_pipeline(RenderPipelineDescriptor {
