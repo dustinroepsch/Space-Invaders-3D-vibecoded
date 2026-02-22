@@ -3,9 +3,15 @@ name = "invaders_3d"
 version = "0.1.0"
 edition = "2024"
 
+[features]
+webgl2 = ["bevy/webgl2"]
+
 [dependencies]
 bevy = { version = "0.18", features = ["3d"] }
 rand = "0.8"
+
+[target.'cfg(target_arch = "wasm32")'.dependencies]
+getrandom = { version = "0.2", features = ["js"] }
 
 # Enable a small amount of optimization in the dev profile.
 [profile.dev]

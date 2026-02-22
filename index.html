@@ -1,23 +1,13 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="en" class="bg-black">
   <head>
     <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>Invaders 3D</title>
+    <script src="https://cdn.tailwindcss.com"></script>
     <!-- Tell trunk to copy the assets folder into the web dist -->
     <link data-trunk rel="copy-dir" href="assets/" />
     <style>
-      * {
-        margin: 0;
-        padding: 0;
-        box-sizing: border-box;
-      }
-      html,
-      body {
-        width: 100%;
-        height: 100%;
-        background: #000;
-        overflow: hidden;
-      }
       canvas {
         display: block;
         width: 100vw;
@@ -25,7 +15,25 @@
       }
     </style>
   </head>
-  <body>
+  <body class="bg-black w-full h-full overflow-hidden">
+
+    <!-- Loading screen — hidden once WASM canvas appears -->
+    <div id="loading"
+         class="fixed inset-0 z-50 flex flex-col items-center justify-center bg-black text-green-400 font-mono select-none">
+      <p class="text-4xl font-bold tracking-widest mb-6 animate-pulse">INVADERS 3D</p>
+      <p class="text-sm tracking-[0.3em] text-green-600">LOADING…</p>
+    </div>
+
     <!-- Trunk injects the WASM bootstrap script here automatically -->
+    <script>
+      // Hide the loading screen once the canvas is created by Bevy/WASM
+      const observer = new MutationObserver(() => {
+        if (document.querySelector('canvas')) {
+          document.getElementById('loading').style.display = 'none';
+          observer.disconnect();
+        }
+      });
+      observer.observe(document.body, { childList: true, subtree: true });
+    </script>
   </body>
 </html>
