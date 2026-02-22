@@ -93,36 +93,26 @@
         document.getElementById('touch-controls').style.display = 'flex';
       }
 
-      // Dispatch a key event to the window so Bevy's winit picks it up
-      function key(type, code) {
-        window.dispatchEvent(new KeyboardEvent(type, {
-          key: code === 'Space' ? ' ' : code,
-          code: code,
-          bubbles: true,
-          cancelable: true,
-        }));
-      }
+      // Shared state read each frame by Rust via web_sys
+      window.touchInput = { left: false, right: false, fire: false };
 
-      // Wire up each button: keydown on press, keyup on release
-      function bindButton(id, code) {
+      function bindButton(id, key) {
         const btn = document.getElementById(id);
         btn.addEventListener('touchstart', (e) => {
           e.preventDefault();
-          key('keydown', code);
+          window.touchInput[key] = true;
         }, { passive: false });
-        btn.addEventListener('touchend', (e) => {
-          e.preventDefault();
-          key('keyup', code);
-        }, { passive: false });
-        btn.addEventListener('touchcancel', (e) => {
-          e.preventDefault();
-          key('keyup', code);
-        }, { passive: false });
+        ['touchend', 'touchcancel'].forEach((evt) => {
+          btn.addEventListener(evt, (e) => {
+            e.preventDefault();
+            window.touchInput[key] = false;
+          }, { passive: false });
+        });
       }
 
-      bindButton('btn-left',  'ArrowLeft');
-      bindButton('btn-right', 'ArrowRight');
-      bindButton('btn-fire',  'Space');
+      bindButton('btn-left',  'left');
+      bindButton('btn-right', 'right');
+      bindButton('btn-fire',  'fire');
     </script>
   </body>
 </html>

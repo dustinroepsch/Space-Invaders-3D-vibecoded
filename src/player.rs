@@ -81,6 +81,29 @@ fn spawn_player(
     spawn_player_ship(&mut commands, &mut meshes, &mut materials);
 }
 
+/// Reads the `window.touchInput` object set by the mobile HTML buttons.
+/// Returns (left, right, fire). Always false on non-WASM targets.
+fn touch_input() -> (bool, bool, bool) {
+    #[cfg(target_arch = "wasm32")]
+    {
+        use js_sys::Reflect;
+        use wasm_bindgen::JsValue;
+        let window = web_sys::window().unwrap();
+        let obj = Reflect::get(&window, &JsValue::from_str("touchInput")).unwrap_or(JsValue::NULL);
+        let get = |key: &str| {
+            Reflect::get(&obj, &JsValue::from_str(key))
+                .ok()
+                .and_then(|v| v.as_bool())
+                .unwrap_or(false)
+        };
+        (get("left"), get("right"), get("fire"))
+    }
+    #[cfg(not(target_arch = "wasm32"))]
+    {
+        (false, false, false)
+    }
+}
+
 fn player_movement(
     time: Res<Time>,
     keyboard: Res<ButtonInput<KeyCode>>,
@@ -90,11 +113,13 @@ fn player_movement(
         return;
     };
 
+    let (touch_left, touch_right, _) = touch_input();
+
     let mut direction = 0.0;
-    if keyboard.pressed(KeyCode::KeyA) || keyboard.pressed(KeyCode::ArrowLeft) {
+    if keyboard.pressed(KeyCode::KeyA) || keyboard.pressed(KeyCode::ArrowLeft) || touch_left {
         direction -= 1.0;
     }
-    if keyboard.pressed(KeyCode::KeyD) || keyboard.pressed(KeyCode::ArrowRight) {
+    if keyboard.pressed(KeyCode::KeyD) || keyboard.pressed(KeyCode::ArrowRight) || touch_right {
         direction += 1.0;
     }
 
@@ -117,7 +142,8 @@ fn player_shoot(
 ) {
     cooldown.timer.tick(time.delta());
 
-    if keyboard.pressed(KeyCode::Space) && cooldown.timer.is_finished() {
+    let (_, _, touch_fire) = touch_input();
+    if (keyboard.pressed(KeyCode::Space) || touch_fire) && cooldown.timer.is_finished() {
         let Ok(player_transform) = query.single() else {
             return;
         };
