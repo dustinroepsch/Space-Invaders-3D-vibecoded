@@ -104,7 +104,7 @@ fn show_game_over(mut commands: Commands, score: Res<Score>) {
                 },
             ));
             parent.spawn((
-                Text::new("Press SPACE to restart"),
+                Text::new("Press SPACE or tap to restart"),
                 TextFont {
                     font_size: 30.0,
                     ..default()
@@ -122,6 +122,7 @@ fn show_game_over(mut commands: Commands, score: Res<Score>) {
 fn restart_game(
     mut commands: Commands,
     keyboard: Res<ButtonInput<KeyCode>>,
+    touches: Res<Touches>,
     mut next_state: ResMut<NextState<GameState>>,
     mut score: ResMut<Score>,
     mut meshes: ResMut<Assets<Mesh>>,
@@ -136,7 +137,8 @@ fn restart_game(
     trails: Query<Entity, With<TrailParticle>>,
     score_popups: Query<Entity, With<ScorePopup>>,
 ) {
-    if !keyboard.just_pressed(KeyCode::Space) {
+    let tapped = touches.iter_just_pressed().next().is_some();
+    if !keyboard.just_pressed(KeyCode::Space) && !tapped {
         return;
     }
 
@@ -307,7 +309,7 @@ fn show_victory(mut commands: Commands, score: Res<Score>) {
                 },
             ));
             parent.spawn((
-                Text::new("Press SPACE to play again"),
+                Text::new("Press SPACE or tap to play again"),
                 TextFont {
                     font_size: 30.0,
                     ..default()
@@ -325,6 +327,7 @@ fn show_victory(mut commands: Commands, score: Res<Score>) {
 fn restart_from_victory(
     mut commands: Commands,
     keyboard: Res<ButtonInput<KeyCode>>,
+    touches: Res<Touches>,
     mut next_state: ResMut<NextState<GameState>>,
     mut score: ResMut<Score>,
     mut meshes: ResMut<Assets<Mesh>>,
@@ -339,7 +342,8 @@ fn restart_from_victory(
     trails: Query<Entity, With<TrailParticle>>,
     score_popups: Query<Entity, With<ScorePopup>>,
 ) {
-    if !keyboard.just_pressed(KeyCode::Space) {
+    let tapped = touches.iter_just_pressed().next().is_some();
+    if !keyboard.just_pressed(KeyCode::Space) && !tapped {
         return;
     }
 
