@@ -83,7 +83,7 @@ fn spawn_player(
 
 /// Reads the `window.touchInput` object set by the mobile HTML buttons.
 /// Returns (left, right, fire). Always false on non-WASM targets.
-fn touch_input() -> (bool, bool, bool) {
+pub fn touch_input() -> (bool, bool, bool) {
     #[cfg(target_arch = "wasm32")]
     {
         use js_sys::Reflect;
