@@ -5,6 +5,7 @@ use bevy::{
     },
     ecs::query::QueryItem,
     prelude::*,
+    ui_render::graph::NodeUi,
     render::{
         extract_component::{ExtractComponent, ExtractComponentPlugin},
         render_graph::{
@@ -37,12 +38,15 @@ impl Plugin for CrtPlugin {
         render_app
             .add_systems(RenderStartup, init_crt_pipeline)
             .add_render_graph_node::<ViewNodeRunner<CrtNode>>(Core3d, CrtLabel)
+            // Run CRT *after* the UI pass so scanlines and barrel distortion
+            // are applied on top of the HUD text too.  The UI pass itself runs
+            // after Node3d::EndMainPassPostProcessing (added by bevy_ui_render).
             .add_render_graph_edges(
                 Core3d,
                 (
-                    Node3d::Tonemapping,
+                    NodeUi::UiPass,
                     CrtLabel,
-                    Node3d::EndMainPassPostProcessing,
+                    Node3d::Upscaling,
                 ),
             );
     }
