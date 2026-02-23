@@ -137,16 +137,25 @@ fn handle_mystery_ship_killed(
     mut commands: Commands,
     mut events: MessageReader<MysteryShipKilledEvent>,
     camera_query: Query<(&Camera, &GlobalTransform)>,
+    ui_scale: Res<UiScale>,
 ) {
     let Ok((camera, camera_transform)) = camera_query.single() else {
         return;
     };
+
+    // Val::Px values are in "UI units". With UiScale != 1.0 a UI unit no longer
+    // equals a logical pixel, so we divide the viewport-pixel coordinates
+    // returned by world_to_viewport by the current scale before storing them.
+    let scale = ui_scale.0.max(0.001);
 
     for event in events.read() {
         // Project the 3-D kill position into screen (viewport) pixels.
         let screen_pos = camera
             .world_to_viewport(camera_transform, event.world_pos)
             .unwrap_or(Vec2::new(400.0, 120.0));
+
+        let top_ui = screen_pos.y / scale;
+        let left_ui = (screen_pos.x - 28.0) / scale;
 
         commands.spawn((
             Text::new(format!("+{}", event.points)),
@@ -157,13 +166,13 @@ fn handle_mystery_ship_killed(
             TextColor(Color::srgba(1.0, 0.85, 0.15, 1.0)),
             Node {
                 position_type: PositionType::Absolute,
-                left: Val::Px(screen_pos.x - 28.0),
-                top: Val::Px(screen_pos.y),
+                left: Val::Px(left_ui),
+                top: Val::Px(top_ui),
                 ..default()
             },
             ScorePopup {
                 timer: Timer::from_seconds(1.5, TimerMode::Once),
-                start_top: screen_pos.y,
+                start_top: top_ui,
             },
         ));
     }
