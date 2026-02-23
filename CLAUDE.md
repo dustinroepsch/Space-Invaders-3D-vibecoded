@@ -19,10 +19,10 @@ A 3D space invaders game built with Bevy 0.18 in Rust (2024 edition). Features v
 ### Web (WASM) Build
 
 - **Dev server:** `trunk serve` (localhost:8080)
-- **Production build:** `trunk build` → outputs to `dist/`
+- **Production build:** `trunk build --release` → outputs to `dist/` (uses `wasm-release` profile: `opt-level = "s"`, strips debuginfo)
 - **WASM compile check:** `cargo check --target wasm32-unknown-unknown --features webgl2`
 
-`Trunk.toml` sets `features = ["webgl2"]` automatically. The `getrandom` dependency under `[target.'cfg(target_arch = "wasm32")'.dependencies]` enables `rand::thread_rng()` on WASM via the Web Crypto API.
+`Trunk.toml` sets `features = ["webgl2"]` automatically. The `getrandom` dependency under `[target.'cfg(target_arch = "wasm32")'.dependencies]` enables `rand::thread_rng()` on WASM via the Web Crypto API. `.cargo/config.toml` adds `-C target-feature=+reference-types` for the WASM target — required by wasm-bindgen 0.2.100+.
 
 ## Architecture
 
@@ -47,6 +47,10 @@ src/
 
 assets/
   shaders/crt.wgsl — WGSL fragment shader for the CRT effect
+
+index.html         — Web entry point for Trunk: AudioContext patch (browser audio unlock),
+                     loading screen (MutationObserver hides it when canvas appears),
+                     mobile touch controls (shown only on touch devices via CSS media query)
 ```
 
 ## Key Patterns
@@ -72,14 +76,19 @@ assets/
 ### Barrier Blocks
 Each barrier block is a `Barrier { health: u8 }` entity. On bullet hit, health decrements and the material is replaced (`barrier_material(health)` in `barrier.rs`). At health 0 the block is despawned.
 
+### Mobile Touch Controls (WASM only)
+`index.html` exposes a `window.touchInput = { left, right, fire }` JS global. HTML buttons update it on `touchstart`/`touchend`. Each frame, `touch_input()` in `player.rs` reads this via `js_sys::Reflect` + `web_sys::window()`. On non-WASM builds the function is a no-op that returns `(false, false, false)`.
+
 ## Dependencies
 
 - `bevy` 0.18 (`3d` feature) — game engine
 - `rand` 0.8 — random enemy/mystery ship behavior
 - `getrandom` 0.2 (WASM only, `js` feature) — enables `rand::thread_rng()` in browsers
+- `wasm-bindgen`, `web-sys` (`Window` feature), `js-sys` (WASM only) — mobile touch input via `window.touchInput` JS global
 
 ## Game Controls
 
 - **A / Left Arrow** — move left
 - **D / Right Arrow** — move right
 - **Space** — shoot
+- **Mobile** — on-screen ◀ ▶ and FIRE buttons (touch devices only)
