@@ -5,34 +5,61 @@
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>Invaders 3D</title>
     <script src="https://cdn.tailwindcss.com"></script>
-    <!-- Resume Bevy's AudioContext on first user gesture.
-         Must run before the WASM module loads so we capture the context
-         as soon as it's created. -->
+    <!-- Resume Bevy's AudioContext on every user gesture.
+         Runs before the WASM module loads so the constructor is patched
+         before cpal/kira creates its AudioContext.
+
+         Three iOS Safari quirks addressed here:
+         1. webkitAudioContext must be patched too (older iOS / some current versions).
+         2. { once: true } causes a race: if the context doesn't exist yet on the
+            first gesture the listener is gone and audio never unlocks. Keep listening.
+         3. resume() alone is insufficient — iOS requires a BufferSource to actually
+            *start* playing within the gesture handler to fully unlock audio hardware. -->
     <script>
       (function () {
-        const OriginalAudioContext =
-          window.AudioContext || window.webkitAudioContext;
-        if (!OriginalAudioContext) return;
+        const OriginalAC = window.AudioContext || window.webkitAudioContext;
+        if (!OriginalAC) return;
 
         const contexts = [];
 
         function PatchedAudioContext(options) {
-          const ctx = new OriginalAudioContext(options);
+          const ctx = new OriginalAC(options);
           contexts.push(ctx);
           return ctx;
         }
-        PatchedAudioContext.prototype = OriginalAudioContext.prototype;
-        window.AudioContext = PatchedAudioContext;
+        PatchedAudioContext.prototype = OriginalAC.prototype;
 
-        function resumeAll() {
-          contexts.forEach((ctx) => {
-            if (ctx.state === "suspended") ctx.resume();
-          });
+        // Patch both names so contexts created via webkitAudioContext are tracked.
+        window.AudioContext = PatchedAudioContext;
+        if (window.webkitAudioContext) {
+          window.webkitAudioContext = PatchedAudioContext;
         }
 
-        ["keydown", "click", "touchstart"].forEach((evt) =>
-          document.addEventListener(evt, resumeAll, { once: true })
-        );
+        function unlockAndResume(ctx) {
+          if (ctx.state !== "suspended") return;
+          // Play a silent one-sample buffer — required by iOS Safari to fully
+          // unlock the audio hardware within a user-gesture handler.
+          try {
+            const buf = ctx.createBuffer(1, 1, ctx.sampleRate);
+            const src = ctx.createBufferSource();
+            src.buffer = buf;
+            src.connect(ctx.destination);
+            src.start(0);
+          } catch (_) {}
+          ctx.resume().catch(function () {});
+        }
+
+        function resumeAll() {
+          contexts.forEach(unlockAndResume);
+        }
+
+        // Listen on every gesture, not just the first:
+        // - The AudioContext may not exist yet when the first gesture fires
+        //   (WASM still loading), so once:true would permanently lose the chance.
+        // - iOS can re-suspend the context after the page backgrounds.
+        ["keydown", "click", "touchstart", "pointerdown"].forEach(function (evt) {
+          document.addEventListener(evt, resumeAll, { passive: true });
+        });
       })();
     </script>
     <!-- Tell trunk to copy the assets folder into the web dist -->
