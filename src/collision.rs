@@ -27,6 +27,7 @@ impl Plugin for CollisionPlugin {
 fn bullet_enemy_collision(
     mut commands: Commands,
     mut score: ResMut<Score>,
+    mut enemy_count: ResMut<EnemyCount>,
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<StandardMaterial>>,
     bullets: Query<(Entity, &Transform), With<Bullet>>,
@@ -43,7 +44,17 @@ fn bullet_enemy_collision(
                 let row = enemy_row.0;
                 commands.entity(bullet_entity).despawn();
                 commands.entity(enemy_entity).despawn();
-                score.value += 10;
+                // Row-based scoring matching the original arcade:
+                //   row 0 (squid, frontmost) = 30 pts
+                //   rows 1-2 (crab)          = 20 pts
+                //   rows 3+ (octopus)        = 10 pts
+                let points = match row {
+                    0 => 30,
+                    1 | 2 => 20,
+                    _ => 10,
+                };
+                score.value += points;
+                enemy_count.remaining = enemy_count.remaining.saturating_sub(1);
                 spawn_explosion(&mut commands, &mut meshes, &mut materials, pos, row);
                 sound_queue.0.push(SoundKind::EnemyDie);
                 break;

@@ -1,5 +1,6 @@
 use bevy::prelude::*;
 use rand::Rng;
+use std::collections::HashMap;
 
 use crate::components::*;
 use crate::effects::{row_color, row_emissive};
@@ -12,6 +13,7 @@ impl Plugin for EnemyPlugin {
         app.init_resource::<EnemyDirection>()
             .init_resource::<EnemyShootTimer>()
             .init_resource::<EnemySpeed>()
+            .init_resource::<EnemyCount>()
             .init_resource::<CurrentWave>()
             .add_systems(OnEnter(GameState::Playing), setup_wave)
             .add_systems(
@@ -188,8 +190,13 @@ fn setup_wave(
     mut enemy_speed: ResMut<EnemySpeed>,
     mut shoot_timer: ResMut<EnemyShootTimer>,
     mut enemy_dir: ResMut<EnemyDirection>,
+    mut enemy_count: ResMut<EnemyCount>,
 ) {
     let config = wave_config(current_wave.wave);
+
+    let total = config.rows * config.cols;
+    enemy_count.total = total;
+    enemy_count.remaining = total;
 
     enemy_speed.speed = config.speed;
     shoot_timer.timer = Timer::from_seconds(config.shoot_interval, TimerMode::Repeating);
@@ -219,9 +226,20 @@ fn check_wave_cleared(
 fn enemy_movement(
     time: Res<Time>,
     enemy_speed: Res<EnemySpeed>,
+    enemy_count: Res<EnemyCount>,
     mut direction: ResMut<EnemyDirection>,
     mut query: Query<&mut Transform, With<Enemy>>,
 ) {
+    // Mirror the original arcade speed-up: remaining enemies accelerate as the
+    // fleet thins out.  With all enemies alive the multiplier is 1×; when the
+    // last enemy is alive it reaches ~4×.
+    let fraction_remaining = if enemy_count.total > 0 {
+        enemy_count.remaining as f32 / enemy_count.total as f32
+    } else {
+        1.0
+    };
+    let actual_speed = enemy_speed.speed * (1.0 + 3.0 * (1.0 - fraction_remaining));
+
     let mut should_reverse = false;
     for transform in &query {
         let x = transform.translation.x;
@@ -239,7 +257,7 @@ fn enemy_movement(
             transform.translation.z += ENEMY_STEP_DOWN;
         }
     } else {
-        let dx = direction.dir * enemy_speed.speed * time.delta_secs();
+        let dx = direction.dir * actual_speed * time.delta_secs();
         for mut transform in &mut query {
             transform.translation.x += dx;
         }
@@ -253,6 +271,7 @@ fn enemy_shoot(
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<StandardMaterial>>,
     query: Query<&Transform, With<Enemy>>,
+    enemy_bullets: Query<(), With<EnemyBullet>>,
     mut sound_queue: ResMut<SoundQueue>,
 ) {
     timer.timer.tick(time.delta());
@@ -261,14 +280,37 @@ fn enemy_shoot(
         return;
     }
 
-    let enemies: Vec<&Transform> = query.iter().collect();
-    if enemies.is_empty() {
+    // Match the original arcade's ~3 active enemy bullets cap.
+    if enemy_bullets.iter().count() >= 3 {
+        return;
+    }
+
+    let all_positions: Vec<Vec3> = query.iter().map(|t| t.translation).collect();
+    if all_positions.is_empty() {
+        return;
+    }
+
+    // Only the frontmost (highest Z = closest to player) enemy in each column
+    // can shoot, replicating the original arcade "plunger" mechanic.
+    let mut column_fronts: HashMap<i32, Vec3> = HashMap::new();
+    for &pos in &all_positions {
+        // Key by column: enemies in the same column always share the same X
+        // value (they move as a rigid formation), so rounding to 1 decimal
+        // place gives a stable integer key that separates adjacent columns.
+        let col_key = (pos.x * 10.0).round() as i32;
+        let entry = column_fronts.entry(col_key).or_insert(pos);
+        if pos.z > entry.z {
+            *entry = pos;
+        }
+    }
+
+    let eligible: Vec<Vec3> = column_fronts.into_values().collect();
+    if eligible.is_empty() {
         return;
     }
 
     let mut rng = rand::thread_rng();
-    let idx = rng.gen_range(0..enemies.len());
-    let pos = enemies[idx].translation;
+    let pos = eligible[rng.gen_range(0..eligible.len())];
 
     commands.spawn((
         Mesh3d(meshes.add(Cuboid::new(0.15, 0.15, 0.4))),

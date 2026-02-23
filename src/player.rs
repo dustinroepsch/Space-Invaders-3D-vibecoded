@@ -138,12 +138,17 @@ fn player_shoot(
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<StandardMaterial>>,
     query: Query<&Transform, With<Player>>,
+    existing_bullets: Query<(), With<Bullet>>,
     mut sound_queue: ResMut<SoundQueue>,
 ) {
     cooldown.timer.tick(time.delta());
 
     let (_, _, touch_fire) = touch_input();
-    if (keyboard.pressed(KeyCode::Space) || touch_fire) && cooldown.timer.is_finished() {
+    // Original arcade rule: only 1 player bullet on screen at a time.
+    if (keyboard.pressed(KeyCode::Space) || touch_fire)
+        && cooldown.timer.is_finished()
+        && existing_bullets.is_empty()
+    {
         let Ok(player_transform) = query.single() else {
             return;
         };

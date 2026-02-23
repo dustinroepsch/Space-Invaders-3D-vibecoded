@@ -51,6 +51,12 @@ pub struct Score {
 
 // --- Wave System ---
 
+#[derive(Resource, Default)]
+pub struct EnemyCount {
+    pub total: usize,
+    pub remaining: usize,
+}
+
 #[derive(Resource)]
 pub struct CurrentWave {
     pub wave: u32,
@@ -87,76 +93,79 @@ pub struct WaveConfig {
 }
 
 pub fn wave_config(wave: u32) -> WaveConfig {
+    // All waves use a 5×9 grid (45 enemies) matching the original arcade layout.
+    // Base speed is low; the dynamic speed-up mechanic (enemies accelerate as
+    // their numbers dwindle) provides the real difficulty scaling per the original.
     match wave {
         1 => WaveConfig {
             speed: 2.0,
-            shoot_interval: 1.5,
-            rows: 4,
-            cols: 5,
+            shoot_interval: 1.0,
+            rows: 5,
+            cols: 9,
             z_offset: 0.0,
         },
         2 => WaveConfig {
-            speed: 2.4,
-            shoot_interval: 1.4,
-            rows: 4,
-            cols: 5,
-            z_offset: 0.3,
+            speed: 2.2,
+            shoot_interval: 0.9,
+            rows: 5,
+            cols: 9,
+            z_offset: 0.4,
         },
         3 => WaveConfig {
-            speed: 2.8,
-            shoot_interval: 1.3,
-            rows: 4,
-            cols: 5,
-            z_offset: 0.6,
+            speed: 2.4,
+            shoot_interval: 0.8,
+            rows: 5,
+            cols: 9,
+            z_offset: 0.8,
         },
         4 => WaveConfig {
-            speed: 3.2,
-            shoot_interval: 1.2,
+            speed: 2.6,
+            shoot_interval: 0.7,
             rows: 5,
-            cols: 6,
-            z_offset: 0.9,
-        },
-        5 => WaveConfig {
-            speed: 3.6,
-            shoot_interval: 1.1,
-            rows: 5,
-            cols: 6,
+            cols: 9,
             z_offset: 1.2,
         },
-        6 => WaveConfig {
-            speed: 4.0,
-            shoot_interval: 1.0,
+        5 => WaveConfig {
+            speed: 2.8,
+            shoot_interval: 0.65,
             rows: 5,
-            cols: 6,
-            z_offset: 1.5,
+            cols: 9,
+            z_offset: 1.6,
+        },
+        6 => WaveConfig {
+            speed: 3.0,
+            shoot_interval: 0.6,
+            rows: 5,
+            cols: 9,
+            z_offset: 2.0,
         },
         7 => WaveConfig {
-            speed: 4.4,
-            shoot_interval: 0.9,
-            rows: 6,
-            cols: 7,
-            z_offset: 1.8,
-        },
-        8 => WaveConfig {
-            speed: 4.8,
-            shoot_interval: 0.8,
-            rows: 6,
-            cols: 7,
-            z_offset: 2.1,
-        },
-        9 => WaveConfig {
-            speed: 5.2,
-            shoot_interval: 0.7,
-            rows: 6,
-            cols: 7,
+            speed: 3.3,
+            shoot_interval: 0.55,
+            rows: 5,
+            cols: 9,
             z_offset: 2.4,
         },
+        8 => WaveConfig {
+            speed: 3.6,
+            shoot_interval: 0.5,
+            rows: 5,
+            cols: 9,
+            z_offset: 2.8,
+        },
+        9 => WaveConfig {
+            speed: 3.9,
+            shoot_interval: 0.45,
+            rows: 5,
+            cols: 9,
+            z_offset: 3.2,
+        },
         _ => WaveConfig {
-            speed: 5.6,
-            shoot_interval: 0.6,
-            rows: 7,
-            cols: 8,
-            z_offset: 2.7,
+            speed: 4.2,
+            shoot_interval: 0.4,
+            rows: 5,
+            cols: 9,
+            z_offset: 3.5,
         },
     }
 }
@@ -265,10 +274,11 @@ pub const PLAYER_Y: f32 = 0.5;
 pub const PLAYER_Z: f32 = 8.0;
 
 pub const BULLET_SPEED: f32 = 15.0;
-pub const ENEMY_BULLET_SPEED: f32 = 8.0;
+pub const ENEMY_BULLET_SPEED: f32 = 10.0;
 
 pub const ENEMY_STEP_DOWN: f32 = 0.8;
-pub const ENEMY_SPACING: f32 = 1.8;
+// Reduced from 1.8 to 1.5 so 9 columns fit within the arena width.
+pub const ENEMY_SPACING: f32 = 1.5;
 pub const ENEMY_START_Z: f32 = -4.0;
 pub const ENEMY_START_Y: f32 = 0.5;
 
