@@ -1,3 +1,5 @@
+use std::collections::HashMap;
+
 use bevy::prelude::*;
 use rand::Rng;
 
@@ -13,6 +15,7 @@ impl Plugin for EnemyPlugin {
             .init_resource::<EnemyShootTimer>()
             .init_resource::<EnemySpeed>()
             .init_resource::<CurrentWave>()
+            .init_resource::<EnemyInitialCount>()
             .add_systems(OnEnter(GameState::Playing), setup_wave)
             .add_systems(
                 Update,
@@ -151,6 +154,7 @@ pub fn spawn_enemy_wave(
                     Visibility::default(),
                     Enemy,
                     EnemyRow(row),
+                    EnemyCol(col),
                 ))
                 .with_children(|parent| {
                     for &(cx, cy, cz) in body_voxels {
@@ -188,12 +192,14 @@ fn setup_wave(
     mut enemy_speed: ResMut<EnemySpeed>,
     mut shoot_timer: ResMut<EnemyShootTimer>,
     mut enemy_dir: ResMut<EnemyDirection>,
+    mut initial_count: ResMut<EnemyInitialCount>,
 ) {
     let config = wave_config(current_wave.wave);
 
     enemy_speed.speed = config.speed;
     shoot_timer.timer = Timer::from_seconds(config.shoot_interval, TimerMode::Repeating);
     enemy_dir.dir = 1.0;
+    initial_count.count = config.rows * config.cols;
 
     spawn_enemy_wave(&mut commands, &mut meshes, &mut materials, &config);
 }
@@ -219,9 +225,24 @@ fn check_wave_cleared(
 fn enemy_movement(
     time: Res<Time>,
     enemy_speed: Res<EnemySpeed>,
+    initial_count: Res<EnemyInitialCount>,
     mut direction: ResMut<EnemyDirection>,
     mut query: Query<&mut Transform, With<Enemy>>,
 ) {
+    let current_count = query.iter().count();
+    if current_count == 0 {
+        return;
+    }
+
+    // Core Space Invaders mechanic: as aliens are destroyed the remaining ones
+    // speed up.  When the last alien is alive it moves at ~6x the base speed.
+    let speed_scale = if initial_count.count > 0 {
+        (initial_count.count as f32 / current_count as f32).min(6.0)
+    } else {
+        1.0
+    };
+    let effective_speed = enemy_speed.speed * speed_scale;
+
     let mut should_reverse = false;
     for transform in &query {
         let x = transform.translation.x;
@@ -239,7 +260,7 @@ fn enemy_movement(
             transform.translation.z += ENEMY_STEP_DOWN;
         }
     } else {
-        let dx = direction.dir * enemy_speed.speed * time.delta_secs();
+        let dx = direction.dir * effective_speed * time.delta_secs();
         for mut transform in &mut query {
             transform.translation.x += dx;
         }
@@ -252,7 +273,8 @@ fn enemy_shoot(
     mut timer: ResMut<EnemyShootTimer>,
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<StandardMaterial>>,
-    query: Query<&Transform, With<Enemy>>,
+    query: Query<(&Transform, &EnemyCol), With<Enemy>>,
+    existing_bullets: Query<(), With<EnemyBullet>>,
     mut sound_queue: ResMut<SoundQueue>,
 ) {
     timer.timer.tick(time.delta());
@@ -261,14 +283,33 @@ fn enemy_shoot(
         return;
     }
 
-    let enemies: Vec<&Transform> = query.iter().collect();
-    if enemies.is_empty() {
+    // Original SI: at most 3 enemy bullets on screen simultaneously
+    if existing_bullets.iter().count() >= MAX_ENEMY_BULLETS {
+        return;
+    }
+
+    // Original SI: only the frontmost alien in each column (highest Z = closest
+    // to player) is allowed to fire. Pick one of those shooters at random.
+    let mut col_front: HashMap<usize, Vec3> = HashMap::new();
+    for (transform, col) in &query {
+        let pos = transform.translation;
+        col_front
+            .entry(col.0)
+            .and_modify(|best| {
+                if pos.z > best.z {
+                    *best = pos;
+                }
+            })
+            .or_insert(pos);
+    }
+
+    let front_positions: Vec<Vec3> = col_front.into_values().collect();
+    if front_positions.is_empty() {
         return;
     }
 
     let mut rng = rand::thread_rng();
-    let idx = rng.gen_range(0..enemies.len());
-    let pos = enemies[idx].translation;
+    let pos = front_positions[rng.gen_range(0..front_positions.len())];
 
     commands.spawn((
         Mesh3d(meshes.add(Cuboid::new(0.15, 0.15, 0.4))),

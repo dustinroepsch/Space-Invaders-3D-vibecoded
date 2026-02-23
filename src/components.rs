@@ -18,6 +18,9 @@ pub struct EnemyBullet;
 pub struct EnemyRow(pub usize);
 
 #[derive(Component)]
+pub struct EnemyCol(pub usize);
+
+#[derive(Component)]
 pub struct ExplosionParticle;
 
 #[derive(Component)]
@@ -56,6 +59,13 @@ pub struct CurrentWave {
     pub wave: u32,
 }
 
+/// Tracks how many enemies were alive at the start of each wave.
+/// Used to scale movement speed as enemies are killed.
+#[derive(Resource, Default)]
+pub struct EnemyInitialCount {
+    pub count: usize,
+}
+
 impl Default for CurrentWave {
     fn default() -> Self {
         Self { wave: 1 }
@@ -87,74 +97,77 @@ pub struct WaveConfig {
 }
 
 pub fn wave_config(wave: u32) -> WaveConfig {
+    // All waves use 5 rows x 8 cols (40 aliens) matching original Space Invaders'
+    // 5-row layout. Difficulty scales via base speed and shoot interval.
+    // Speed scaling as aliens die provides additional within-wave difficulty.
     match wave {
         1 => WaveConfig {
-            speed: 2.0,
-            shoot_interval: 1.5,
-            rows: 4,
-            cols: 5,
+            speed: 1.5,
+            shoot_interval: 2.0,
+            rows: 5,
+            cols: 8,
             z_offset: 0.0,
         },
         2 => WaveConfig {
-            speed: 2.4,
-            shoot_interval: 1.4,
-            rows: 4,
-            cols: 5,
+            speed: 1.8,
+            shoot_interval: 1.8,
+            rows: 5,
+            cols: 8,
             z_offset: 0.3,
         },
         3 => WaveConfig {
-            speed: 2.8,
-            shoot_interval: 1.3,
-            rows: 4,
-            cols: 5,
+            speed: 2.2,
+            shoot_interval: 1.6,
+            rows: 5,
+            cols: 8,
             z_offset: 0.6,
         },
         4 => WaveConfig {
-            speed: 3.2,
-            shoot_interval: 1.2,
+            speed: 2.6,
+            shoot_interval: 1.4,
             rows: 5,
-            cols: 6,
+            cols: 8,
             z_offset: 0.9,
         },
         5 => WaveConfig {
-            speed: 3.6,
-            shoot_interval: 1.1,
+            speed: 3.0,
+            shoot_interval: 1.2,
             rows: 5,
-            cols: 6,
+            cols: 8,
             z_offset: 1.2,
         },
         6 => WaveConfig {
-            speed: 4.0,
+            speed: 3.5,
             shoot_interval: 1.0,
             rows: 5,
-            cols: 6,
+            cols: 8,
             z_offset: 1.5,
         },
         7 => WaveConfig {
-            speed: 4.4,
+            speed: 4.0,
             shoot_interval: 0.9,
-            rows: 6,
-            cols: 7,
+            rows: 5,
+            cols: 8,
             z_offset: 1.8,
         },
         8 => WaveConfig {
-            speed: 4.8,
+            speed: 4.5,
             shoot_interval: 0.8,
-            rows: 6,
-            cols: 7,
+            rows: 5,
+            cols: 8,
             z_offset: 2.1,
         },
         9 => WaveConfig {
-            speed: 5.2,
+            speed: 5.0,
             shoot_interval: 0.7,
-            rows: 6,
-            cols: 7,
+            rows: 5,
+            cols: 8,
             z_offset: 2.4,
         },
         _ => WaveConfig {
-            speed: 5.6,
+            speed: 5.5,
             shoot_interval: 0.6,
-            rows: 7,
+            rows: 5,
             cols: 8,
             z_offset: 2.7,
         },
@@ -212,6 +225,25 @@ pub const MYSTERY_SHIP_Z: f32 = -7.5;
 pub const MYSTERY_SHIP_Y: f32 = 0.5;
 pub const MYSTERY_SHIP_SPEED: f32 = 7.0;
 pub const MYSTERY_SHIP_COLLISION_DISTANCE: f32 = 1.2;
+
+// --- Player Lives ---
+
+#[derive(Resource)]
+pub struct PlayerLives {
+    pub lives: u32,
+}
+
+impl Default for PlayerLives {
+    fn default() -> Self {
+        Self { lives: 3 }
+    }
+}
+
+/// While this timer is active the player is invincible (brief window after being hit).
+#[derive(Resource, Default)]
+pub struct PlayerInvincible {
+    pub timer: Option<Timer>,
+}
 
 // --- Timers ---
 
@@ -274,6 +306,7 @@ pub const ENEMY_START_Y: f32 = 0.5;
 
 pub const COLLISION_DISTANCE: f32 = 0.8;
 pub const GAME_OVER_Z: f32 = 7.0;
+pub const MAX_ENEMY_BULLETS: usize = 3;
 
 pub const BARRIER_Z: f32 = 5.5;
 pub const BARRIER_HEALTH: u8 = 2;

@@ -55,13 +55,17 @@ fn spawn_scoreboard(mut commands: Commands) {
 fn update_scoreboard(
     score: Res<Score>,
     current_wave: Res<CurrentWave>,
+    lives: Res<PlayerLives>,
     mut query: Query<&mut Text, With<ScoreText>>,
 ) {
-    if !score.is_changed() && !current_wave.is_changed() {
+    if !score.is_changed() && !current_wave.is_changed() && !lives.is_changed() {
         return;
     }
     for mut text in &mut query {
-        **text = format!("Wave {} | Score: {}", current_wave.wave, score.value);
+        **text = format!(
+            "Wave {} | Score: {} | Lives: {}",
+            current_wave.wave, score.value, lives.lives
+        );
     }
 }
 
@@ -127,6 +131,8 @@ fn restart_game(
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<StandardMaterial>>,
     mut current_wave: ResMut<CurrentWave>,
+    mut lives: ResMut<PlayerLives>,
+    mut invincible: ResMut<PlayerInvincible>,
     game_over_ui: Query<Entity, With<GameOverUI>>,
     enemies: Query<Entity, With<Enemy>>,
     bullets: Query<Entity, With<Bullet>>,
@@ -169,9 +175,11 @@ fn restart_game(
         commands.entity(entity).despawn();
     }
 
-    // Reset score, wave, and respawn player
+    // Reset score, wave, lives, and respawn player
     score.value = 0;
     current_wave.wave = 1;
+    lives.lives = 3;
+    invincible.timer = None;
 
     spawn_player_ship(&mut commands, &mut meshes, &mut materials);
 
@@ -331,6 +339,8 @@ fn restart_from_victory(
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<StandardMaterial>>,
     mut current_wave: ResMut<CurrentWave>,
+    mut lives: ResMut<PlayerLives>,
+    mut invincible: ResMut<PlayerInvincible>,
     victory_ui: Query<Entity, With<VictoryUI>>,
     enemies: Query<Entity, With<Enemy>>,
     bullets: Query<Entity, With<Bullet>>,
@@ -376,6 +386,8 @@ fn restart_from_victory(
     // Reset everything
     score.value = 0;
     current_wave.wave = 1;
+    lives.lives = 3;
+    invincible.timer = None;
 
     spawn_player_ship(&mut commands, &mut meshes, &mut materials);
 

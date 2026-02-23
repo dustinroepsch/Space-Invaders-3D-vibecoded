@@ -12,6 +12,7 @@ impl Plugin for CollisionPlugin {
         app.add_systems(
             Update,
             (
+                tick_player_invincible,
                 bullet_enemy_collision,
                 enemy_bullet_player_collision,
                 enemy_reaches_bottom,
@@ -43,7 +44,14 @@ fn bullet_enemy_collision(
                 let row = enemy_row.0;
                 commands.entity(bullet_entity).despawn();
                 commands.entity(enemy_entity).despawn();
-                score.value += 10;
+                // Original SI scoring: closest row (row 0) = 10 pts,
+                // middle rows = 20 pts, furthest rows = 30 pts.
+                let points = match row {
+                    0 => 10,
+                    1 | 2 => 20,
+                    _ => 30,
+                };
+                score.value += points;
                 spawn_explosion(&mut commands, &mut meshes, &mut materials, pos, row);
                 sound_queue.0.push(SoundKind::EnemyDie);
                 break;
@@ -52,27 +60,69 @@ fn bullet_enemy_collision(
     }
 }
 
+fn tick_player_invincible(time: Res<Time>, mut invincible: ResMut<PlayerInvincible>) {
+    if let Some(timer) = &mut invincible.timer {
+        timer.tick(time.delta());
+        if timer.finished() {
+            invincible.timer = None;
+        }
+    }
+}
+
 fn enemy_bullet_player_collision(
     mut commands: Commands,
     mut next_state: ResMut<NextState<GameState>>,
+    mut meshes: ResMut<Assets<Mesh>>,
+    mut materials: ResMut<Assets<StandardMaterial>>,
     enemy_bullets: Query<(Entity, &Transform), With<EnemyBullet>>,
     players: Query<&Transform, With<Player>>,
+    mut lives: ResMut<PlayerLives>,
+    mut invincible: ResMut<PlayerInvincible>,
     mut sound_queue: ResMut<SoundQueue>,
 ) {
+    // Skip collision detection during the post-hit invincibility window
+    if invincible.timer.is_some() {
+        return;
+    }
+
     let Ok(player_transform) = players.single() else {
         return;
     };
 
+    let mut hit_entity: Option<Entity> = None;
     for (bullet_entity, bullet_transform) in &enemy_bullets {
         let distance = bullet_transform
             .translation
             .distance(player_transform.translation);
         if distance < COLLISION_DISTANCE {
-            commands.entity(bullet_entity).despawn();
-            sound_queue.0.push(SoundKind::PlayerDie);
-            next_state.set(GameState::GameOver);
-            return;
+            hit_entity = Some(bullet_entity);
+            break;
         }
+    }
+
+    let Some(hit) = hit_entity else { return };
+
+    commands.entity(hit).despawn();
+    sound_queue.0.push(SoundKind::PlayerDie);
+    spawn_explosion(
+        &mut commands,
+        &mut meshes,
+        &mut materials,
+        player_transform.translation,
+        0,
+    );
+
+    lives.lives = lives.lives.saturating_sub(1);
+    if lives.lives == 0 {
+        next_state.set(GameState::GameOver);
+    } else {
+        // Clear remaining enemy bullets and grant a 2-second invincibility window
+        for (e, _) in &enemy_bullets {
+            if e != hit {
+                commands.entity(e).despawn();
+            }
+        }
+        invincible.timer = Some(Timer::from_seconds(2.0, TimerMode::Once));
     }
 }
 

@@ -8,6 +8,8 @@ pub struct PlayerPlugin;
 impl Plugin for PlayerPlugin {
     fn build(&self, app: &mut App) {
         app.init_resource::<ShootCooldown>()
+            .init_resource::<PlayerLives>()
+            .init_resource::<PlayerInvincible>()
             .add_systems(Startup, spawn_player)
             .add_systems(
                 Update,
@@ -138,12 +140,18 @@ fn player_shoot(
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<StandardMaterial>>,
     query: Query<&Transform, With<Player>>,
+    existing_bullets: Query<(), With<Bullet>>,
     mut sound_queue: ResMut<SoundQueue>,
 ) {
     cooldown.timer.tick(time.delta());
 
     let (_, _, touch_fire) = touch_input();
     if (keyboard.pressed(KeyCode::Space) || touch_fire) && cooldown.timer.is_finished() {
+        // Original Space Invaders: only one player bullet on screen at a time
+        if !existing_bullets.is_empty() {
+            return;
+        }
+
         let Ok(player_transform) = query.single() else {
             return;
         };
