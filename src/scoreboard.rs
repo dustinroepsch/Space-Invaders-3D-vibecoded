@@ -1,7 +1,7 @@
 use bevy::prelude::*;
 
 use crate::components::*;
-use crate::player::spawn_player_ship;
+use crate::player::{spawn_player_ship, touch_input};
 
 pub struct ScoreboardPlugin;
 
@@ -104,7 +104,7 @@ fn show_game_over(mut commands: Commands, score: Res<Score>) {
                 },
             ));
             parent.spawn((
-                Text::new("Press SPACE to restart"),
+                Text::new("Press SPACE or tap FIRE to restart"),
                 TextFont {
                     font_size: 30.0,
                     ..default()
@@ -136,7 +136,8 @@ fn restart_game(
     trails: Query<Entity, With<TrailParticle>>,
     score_popups: Query<Entity, With<ScorePopup>>,
 ) {
-    if !keyboard.just_pressed(KeyCode::Space) {
+    let (_, _, touch_fire) = touch_input();
+    if !keyboard.just_pressed(KeyCode::Space) && !touch_fire {
         return;
     }
 
@@ -307,7 +308,7 @@ fn show_victory(mut commands: Commands, score: Res<Score>) {
                 },
             ));
             parent.spawn((
-                Text::new("Press SPACE to play again"),
+                Text::new("Press SPACE or tap FIRE to play again"),
                 TextFont {
                     font_size: 30.0,
                     ..default()
@@ -339,7 +340,8 @@ fn restart_from_victory(
     trails: Query<Entity, With<TrailParticle>>,
     score_popups: Query<Entity, With<ScorePopup>>,
 ) {
-    if !keyboard.just_pressed(KeyCode::Space) {
+    let (_, _, touch_fire) = touch_input();
+    if !keyboard.just_pressed(KeyCode::Space) && !touch_fire {
         return;
     }
 

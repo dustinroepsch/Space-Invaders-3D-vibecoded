@@ -53,7 +53,23 @@ fn main() {
             SoundPlugin,
         ))
         .add_systems(Startup, (setup_scene, spawn_starfield))
+        .add_systems(Update, update_ui_scale)
         .run();
+}
+
+/// Dynamically adjust Bevy's global UI scale so text and layout stay readable
+/// on small mobile screens. We target a reference width of 900 logical pixels;
+/// anything narrower is scaled down proportionally (capped at 0.3x minimum so
+/// nothing becomes illegible, and 1.0x maximum so desktop layouts are unchanged).
+fn update_ui_scale(windows: Query<&Window>, mut ui_scale: ResMut<UiScale>) {
+    let Ok(window) = windows.single() else {
+        return;
+    };
+    const REF_WIDTH: f32 = 900.0;
+    let scale = (window.width() / REF_WIDTH).clamp(0.3, 1.0);
+    if (ui_scale.0 - scale).abs() > 0.001 {
+        ui_scale.0 = scale;
+    }
 }
 
 fn setup_scene(
