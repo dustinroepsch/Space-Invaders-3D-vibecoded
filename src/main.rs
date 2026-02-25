@@ -5,6 +5,7 @@ mod components;
 mod crt;
 mod effects;
 mod enemy;
+mod music;
 mod mystery;
 mod player;
 mod scoreboard;
@@ -20,6 +21,7 @@ use components::{GameState, HighScore, Score};
 use crt::{CrtPlugin, CrtSettings};
 use effects::EffectsPlugin;
 use enemy::EnemyPlugin;
+use music::MusicPlugin;
 use mystery::MysteryPlugin;
 use player::PlayerPlugin;
 use scoreboard::ScoreboardPlugin;
@@ -49,6 +51,7 @@ fn main() {
             ScoreboardPlugin,
             EffectsPlugin,
             BarrierPlugin,
+            MusicPlugin,
             MysteryPlugin,
             CrtPlugin,
             SoundPlugin,
