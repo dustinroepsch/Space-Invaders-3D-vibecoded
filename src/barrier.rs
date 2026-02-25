@@ -6,7 +6,8 @@ pub struct BarrierPlugin;
 
 impl Plugin for BarrierPlugin {
     fn build(&self, app: &mut App) {
-        app.add_systems(Startup, spawn_barriers);
+        // Spawn barriers on each wave start so they reset every wave.
+        app.add_systems(OnEnter(GameState::Playing), spawn_barriers);
     }
 }
 
@@ -34,8 +35,8 @@ fn spawn_barriers(
         BARRIER_BLOCK_SIZE,
     ));
 
-    // Four bunkers evenly spaced across the arena (arena width = 14, ±7).
-    let bunker_centers: [f32; 4] = [-5.25, -1.75, 1.75, 5.25];
+    // Four bunkers evenly spaced across the wider arena (arena width = 18, ±9).
+    let bunker_centers: [f32; 4] = [-6.75, -2.25, 2.25, 6.75];
 
     for &bx in &bunker_centers {
         for (row, row_shape) in BUNKER_SHAPE.iter().enumerate() {

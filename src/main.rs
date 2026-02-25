@@ -16,7 +16,7 @@ use rand::Rng;
 use barrier::BarrierPlugin;
 use bullet::BulletPlugin;
 use collision::CollisionPlugin;
-use components::{GameState, Score};
+use components::{GameState, HighScore, Score};
 use crt::{CrtPlugin, CrtSettings};
 use effects::EffectsPlugin;
 use enemy::EnemyPlugin;
@@ -40,6 +40,7 @@ fn main() {
         }))
         .init_state::<GameState>()
         .init_resource::<Score>()
+        .init_resource::<HighScore>()
         .add_plugins((
             PlayerPlugin,
             EnemyPlugin,
@@ -77,10 +78,10 @@ fn setup_scene(
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<StandardMaterial>>,
 ) {
-    // Camera: lower and slightly further back for a dramatic angle
+    // Camera: pulled back and higher to see the wider arena (18 units wide).
     commands.spawn((
         Camera3d::default(),
-        Transform::from_xyz(0.0, 15.0, 16.0).looking_at(Vec3::new(0.0, 0.0, 1.0), Vec3::Y),
+        Transform::from_xyz(0.0, 18.0, 20.0).looking_at(Vec3::new(0.0, 0.0, 0.0), Vec3::Y),
         CrtSettings,
     ));
 

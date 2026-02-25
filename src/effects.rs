@@ -27,13 +27,14 @@ struct TrailSpawnTimer {
     timer: Timer,
 }
 
-/// Row colors matching enemy.rs: row 0=red, 1=orange, 2=green, 3=purple
+/// Row colors for 5 rows: row 0=red, 1=orange, 2=green, 3=purple, 4=cyan
 pub fn row_color(row: usize) -> Color {
     match row {
         0 => Color::srgb(1.0, 0.2, 0.2),
         1 => Color::srgb(1.0, 0.6, 0.1),
         2 => Color::srgb(0.2, 1.0, 0.3),
-        _ => Color::srgb(0.7, 0.2, 1.0),
+        3 => Color::srgb(0.7, 0.2, 1.0),
+        _ => Color::srgb(0.2, 0.8, 1.0),
     }
 }
 
@@ -78,7 +79,8 @@ pub fn row_emissive(row: usize) -> LinearRgba {
         0 => LinearRgba::new(10.0, 2.0, 2.0, 1.0),
         1 => LinearRgba::new(10.0, 6.0, 1.0, 1.0),
         2 => LinearRgba::new(2.0, 10.0, 3.0, 1.0),
-        _ => LinearRgba::new(7.0, 2.0, 10.0, 1.0),
+        3 => LinearRgba::new(7.0, 2.0, 10.0, 1.0),
+        _ => LinearRgba::new(2.0, 8.0, 10.0, 1.0),
     }
 }
 

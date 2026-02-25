@@ -18,6 +18,9 @@ pub struct EnemyBullet;
 pub struct EnemyRow(pub usize);
 
 #[derive(Component)]
+pub struct EnemyCol(pub usize);
+
+#[derive(Component)]
 pub struct ExplosionParticle;
 
 #[derive(Component)]
@@ -26,6 +29,14 @@ pub struct TrailParticle;
 #[derive(Component)]
 pub struct Lifetime {
     pub timer: Timer,
+}
+
+/// Marks the player as temporarily invulnerable after respawning.
+#[derive(Component)]
+pub struct PlayerInvulnerable {
+    pub timer: Timer,
+    /// Toggles visibility for blinking effect.
+    pub blink_timer: Timer,
 }
 
 // --- Physics ---
@@ -41,12 +52,36 @@ pub enum GameState {
     Playing,
     GameOver,
     WaveTransition,
-    Victory,
 }
 
 #[derive(Resource, Default)]
 pub struct Score {
     pub value: u32,
+}
+
+/// High score persists across games within a session.
+#[derive(Resource, Default)]
+pub struct HighScore {
+    pub value: u32,
+}
+
+// --- Lives ---
+
+#[derive(Resource)]
+pub struct Lives {
+    pub count: u32,
+}
+
+impl Default for Lives {
+    fn default() -> Self {
+        Self { count: 3 }
+    }
+}
+
+/// Timer for respawning the player after death (when lives remain).
+#[derive(Resource)]
+pub struct PlayerRespawnTimer {
+    pub timer: Timer,
 }
 
 // --- Wave System ---
@@ -64,12 +99,25 @@ impl Default for CurrentWave {
 
 #[derive(Resource)]
 pub struct EnemySpeed {
-    pub speed: f32,
+    pub base_speed: f32,
 }
 
 impl Default for EnemySpeed {
     fn default() -> Self {
-        Self { speed: 2.0 }
+        Self { base_speed: 1.5 }
+    }
+}
+
+/// Tracks how many enemies were in the wave at spawn time,
+/// used to calculate dynamic speed-up.
+#[derive(Resource)]
+pub struct InitialEnemyCount {
+    pub count: u32,
+}
+
+impl Default for InitialEnemyCount {
+    fn default() -> Self {
+        Self { count: 55 }
     }
 }
 
@@ -79,85 +127,39 @@ pub struct WaveTransitionTimer {
 }
 
 pub struct WaveConfig {
-    pub speed: f32,
+    pub base_speed: f32,
     pub shoot_interval: f32,
     pub rows: usize,
     pub cols: usize,
     pub z_offset: f32,
 }
 
+/// Returns configuration for a given wave number.
+/// Formation is always 5×11 (like the original).
+/// Each successive wave starts aliens slightly closer to the player
+/// and increases base speed and fire rate.
 pub fn wave_config(wave: u32) -> WaveConfig {
-    match wave {
-        1 => WaveConfig {
-            speed: 2.0,
-            shoot_interval: 1.5,
-            rows: 4,
-            cols: 5,
-            z_offset: 0.0,
-        },
-        2 => WaveConfig {
-            speed: 2.4,
-            shoot_interval: 1.4,
-            rows: 4,
-            cols: 5,
-            z_offset: 0.3,
-        },
-        3 => WaveConfig {
-            speed: 2.8,
-            shoot_interval: 1.3,
-            rows: 4,
-            cols: 5,
-            z_offset: 0.6,
-        },
-        4 => WaveConfig {
-            speed: 3.2,
-            shoot_interval: 1.2,
-            rows: 5,
-            cols: 6,
-            z_offset: 0.9,
-        },
-        5 => WaveConfig {
-            speed: 3.6,
-            shoot_interval: 1.1,
-            rows: 5,
-            cols: 6,
-            z_offset: 1.2,
-        },
-        6 => WaveConfig {
-            speed: 4.0,
-            shoot_interval: 1.0,
-            rows: 5,
-            cols: 6,
-            z_offset: 1.5,
-        },
-        7 => WaveConfig {
-            speed: 4.4,
-            shoot_interval: 0.9,
-            rows: 6,
-            cols: 7,
-            z_offset: 1.8,
-        },
-        8 => WaveConfig {
-            speed: 4.8,
-            shoot_interval: 0.8,
-            rows: 6,
-            cols: 7,
-            z_offset: 2.1,
-        },
-        9 => WaveConfig {
-            speed: 5.2,
-            shoot_interval: 0.7,
-            rows: 6,
-            cols: 7,
-            z_offset: 2.4,
-        },
-        _ => WaveConfig {
-            speed: 5.6,
-            shoot_interval: 0.6,
-            rows: 7,
-            cols: 8,
-            z_offset: 2.7,
-        },
+    let extra_z = (wave.saturating_sub(1)).min(8) as f32 * 0.5;
+    let base_speed = 1.5 + (wave.saturating_sub(1)).min(12) as f32 * 0.25;
+    let shoot_interval = (1.6 - (wave.saturating_sub(1)).min(10) as f32 * 0.08).max(0.5);
+
+    WaveConfig {
+        base_speed,
+        shoot_interval,
+        rows: 5,
+        cols: 11,
+        z_offset: extra_z,
+    }
+}
+
+/// Points awarded per row, matching the original arcade game.
+/// Row 0 is the topmost (farthest from player) = 30 pts (squid).
+/// Rows 1–2 = 20 pts (crab). Rows 3–4 = 10 pts (octopus).
+pub fn points_for_row(row: usize) -> u32 {
+    match row {
+        0 => 30,
+        1 | 2 => 20,
+        _ => 10,
     }
 }
 
@@ -190,9 +192,6 @@ pub struct ScorePopup {
 #[derive(Component)]
 pub struct WaveTransitionUI;
 
-#[derive(Component)]
-pub struct VictoryUI;
-
 // --- Mystery Ship ---
 
 #[derive(Resource)]
@@ -203,14 +202,14 @@ pub struct MysteryShipTimer {
 impl Default for MysteryShipTimer {
     fn default() -> Self {
         Self {
-            timer: Timer::from_seconds(20.0, TimerMode::Repeating),
+            timer: Timer::from_seconds(25.0, TimerMode::Repeating),
         }
     }
 }
 
-pub const MYSTERY_SHIP_Z: f32 = -7.5;
+pub const MYSTERY_SHIP_Z: f32 = -8.0;
 pub const MYSTERY_SHIP_Y: f32 = 0.5;
-pub const MYSTERY_SHIP_SPEED: f32 = 7.0;
+pub const MYSTERY_SHIP_SPEED: f32 = 5.0;
 pub const MYSTERY_SHIP_COLLISION_DISTANCE: f32 = 1.2;
 
 // --- Timers ---
@@ -236,7 +235,7 @@ pub struct EnemyShootTimer {
 impl Default for EnemyShootTimer {
     fn default() -> Self {
         Self {
-            timer: Timer::from_seconds(1.5, TimerMode::Repeating),
+            timer: Timer::from_seconds(1.6, TimerMode::Repeating),
         }
     }
 }
@@ -256,20 +255,21 @@ impl Default for EnemyDirection {
 
 // --- Constants ---
 
-pub const ARENA_WIDTH: f32 = 14.0;
-pub const ARENA_HEIGHT: f32 = 20.0;
+pub const ARENA_WIDTH: f32 = 18.0;
+pub const ARENA_HEIGHT: f32 = 24.0;
 pub const ARENA_HALF_WIDTH: f32 = ARENA_WIDTH / 2.0;
 
-pub const PLAYER_SPEED: f32 = 8.0;
+pub const PLAYER_SPEED: f32 = 10.0;
 pub const PLAYER_Y: f32 = 0.5;
 pub const PLAYER_Z: f32 = 8.0;
 
-pub const BULLET_SPEED: f32 = 15.0;
+pub const BULLET_SPEED: f32 = 18.0;
 pub const ENEMY_BULLET_SPEED: f32 = 8.0;
 
-pub const ENEMY_STEP_DOWN: f32 = 0.8;
-pub const ENEMY_SPACING: f32 = 1.8;
-pub const ENEMY_START_Z: f32 = -4.0;
+pub const ENEMY_STEP_DOWN: f32 = 0.5;
+pub const ENEMY_COL_SPACING: f32 = 1.2;
+pub const ENEMY_ROW_SPACING: f32 = 1.0;
+pub const ENEMY_START_Z: f32 = -5.0;
 pub const ENEMY_START_Y: f32 = 0.5;
 
 pub const COLLISION_DISTANCE: f32 = 0.8;
@@ -280,3 +280,6 @@ pub const BARRIER_HEALTH: u8 = 2;
 pub const BARRIER_BLOCK_SIZE: f32 = 0.28;
 pub const BARRIER_BLOCK_SPACING: f32 = 0.32;
 pub const BARRIER_COLLISION_DISTANCE: f32 = 0.35;
+
+/// Maximum number of enemy bullets on screen at once (original had 3).
+pub const MAX_ENEMY_BULLETS: usize = 3;

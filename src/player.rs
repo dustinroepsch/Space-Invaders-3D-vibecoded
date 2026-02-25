@@ -8,10 +8,17 @@ pub struct PlayerPlugin;
 impl Plugin for PlayerPlugin {
     fn build(&self, app: &mut App) {
         app.init_resource::<ShootCooldown>()
+            .init_resource::<Lives>()
             .add_systems(Startup, spawn_player)
             .add_systems(
                 Update,
-                (player_movement, player_shoot).run_if(in_state(GameState::Playing)),
+                (
+                    player_movement,
+                    player_shoot,
+                    player_invulnerability,
+                    player_respawn_tick,
+                )
+                    .run_if(in_state(GameState::Playing)),
             );
     }
 }
@@ -53,6 +60,68 @@ pub fn spawn_player_ship(
             MeshMaterial3d(body_mat),
             Transform::from_xyz(0.0, PLAYER_Y, PLAYER_Z),
             Player,
+        ))
+        .with_children(|parent| {
+            parent.spawn((
+                Mesh3d(wing_mesh.clone()),
+                MeshMaterial3d(wing_mat.clone()),
+                Transform::from_xyz(-0.5, -0.05, 0.1),
+            ));
+            parent.spawn((
+                Mesh3d(wing_mesh),
+                MeshMaterial3d(wing_mat),
+                Transform::from_xyz(0.5, -0.05, 0.1),
+            ));
+            parent.spawn((
+                Mesh3d(cockpit_mesh),
+                MeshMaterial3d(cockpit_mat),
+                Transform::from_xyz(0.0, 0.25, -0.2),
+            ));
+        });
+}
+
+/// Spawns a player with temporary invulnerability (blinking).
+pub fn spawn_player_ship_invulnerable(
+    commands: &mut Commands,
+    meshes: &mut ResMut<Assets<Mesh>>,
+    materials: &mut ResMut<Assets<StandardMaterial>>,
+) {
+    let body_mat = materials.add(StandardMaterial {
+        base_color: Color::srgb(0.15, 0.3, 0.9),
+        metallic: 0.9,
+        perceptual_roughness: 0.2,
+        emissive: LinearRgba::new(0.3, 0.5, 2.0, 1.0),
+        ..default()
+    });
+
+    let wing_mat = materials.add(StandardMaterial {
+        base_color: Color::srgba(0.1, 0.15, 0.6, 0.85),
+        metallic: 0.7,
+        perceptual_roughness: 0.3,
+        alpha_mode: AlphaMode::Blend,
+        ..default()
+    });
+
+    let cockpit_mat = materials.add(StandardMaterial {
+        base_color: Color::srgb(0.2, 0.9, 1.0),
+        emissive: LinearRgba::new(2.0, 8.0, 10.0, 1.0),
+        ..default()
+    });
+
+    let body_mesh = meshes.add(Cuboid::new(0.6, 0.4, 1.0));
+    let wing_mesh = meshes.add(Cuboid::new(0.5, 0.1, 0.6));
+    let cockpit_mesh = meshes.add(Cuboid::new(0.2, 0.2, 0.3));
+
+    commands
+        .spawn((
+            Mesh3d(body_mesh),
+            MeshMaterial3d(body_mat),
+            Transform::from_xyz(0.0, PLAYER_Y, PLAYER_Z),
+            Player,
+            PlayerInvulnerable {
+                timer: Timer::from_seconds(2.5, TimerMode::Once),
+                blink_timer: Timer::from_seconds(0.12, TimerMode::Repeating),
+            },
         ))
         .with_children(|parent| {
             parent.spawn((
@@ -130,6 +199,8 @@ fn player_movement(
         .clamp(-ARENA_HALF_WIDTH, ARENA_HALF_WIDTH);
 }
 
+/// Only allows shooting when no player bullet exists on screen (original behavior).
+#[allow(clippy::too_many_arguments)]
 fn player_shoot(
     mut commands: Commands,
     time: Res<Time>,
@@ -138,30 +209,85 @@ fn player_shoot(
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<StandardMaterial>>,
     query: Query<&Transform, With<Player>>,
+    existing_bullets: Query<(), With<Bullet>>,
     mut sound_queue: ResMut<SoundQueue>,
 ) {
     cooldown.timer.tick(time.delta());
 
     let (_, _, touch_fire) = touch_input();
-    if (keyboard.pressed(KeyCode::Space) || touch_fire) && cooldown.timer.is_finished() {
-        let Ok(player_transform) = query.single() else {
-            return;
-        };
+    if !(keyboard.pressed(KeyCode::Space) || touch_fire) || !cooldown.timer.is_finished() {
+        return;
+    }
 
-        let pos = player_transform.translation;
-        commands.spawn((
-            Mesh3d(meshes.add(Cuboid::new(0.15, 0.15, 0.4))),
-            MeshMaterial3d(materials.add(StandardMaterial {
-                base_color: Color::srgb(1.0, 1.0, 0.2),
-                emissive: LinearRgba::new(15.0, 15.0, 3.0, 1.0),
-                ..default()
-            })),
-            Transform::from_xyz(pos.x, pos.y + 0.3, pos.z - 0.5),
-            Bullet,
-            Velocity(Vec3::new(0.0, 0.0, -BULLET_SPEED)),
-        ));
+    // Original Space Invaders: only 1 player bullet on screen at a time.
+    if !existing_bullets.is_empty() {
+        return;
+    }
 
-        sound_queue.0.push(SoundKind::PlayerShoot);
-        cooldown.timer.reset();
+    let Ok(player_transform) = query.single() else {
+        return;
+    };
+
+    let pos = player_transform.translation;
+    commands.spawn((
+        Mesh3d(meshes.add(Cuboid::new(0.15, 0.15, 0.4))),
+        MeshMaterial3d(materials.add(StandardMaterial {
+            base_color: Color::srgb(1.0, 1.0, 0.2),
+            emissive: LinearRgba::new(15.0, 15.0, 3.0, 1.0),
+            ..default()
+        })),
+        Transform::from_xyz(pos.x, pos.y + 0.3, pos.z - 0.5),
+        Bullet,
+        Velocity(Vec3::new(0.0, 0.0, -BULLET_SPEED)),
+    ));
+
+    sound_queue.0.push(SoundKind::PlayerShoot);
+    cooldown.timer.reset();
+}
+
+/// Handles invulnerability blinking and expiry.
+fn player_invulnerability(
+    mut commands: Commands,
+    time: Res<Time>,
+    mut query: Query<(Entity, &mut PlayerInvulnerable, &mut Visibility), With<Player>>,
+) {
+    for (entity, mut invuln, mut visibility) in &mut query {
+        invuln.timer.tick(time.delta());
+        invuln.blink_timer.tick(time.delta());
+
+        // Blink effect
+        if invuln.blink_timer.just_finished() {
+            *visibility = if *visibility == Visibility::Hidden {
+                Visibility::Inherited
+            } else {
+                Visibility::Hidden
+            };
+        }
+
+        // Invulnerability expired
+        if invuln.timer.is_finished() {
+            *visibility = Visibility::Inherited;
+            commands.entity(entity).remove::<PlayerInvulnerable>();
+        }
+    }
+}
+
+/// Ticks the respawn timer and spawns a new player when it expires.
+fn player_respawn_tick(
+    mut commands: Commands,
+    time: Res<Time>,
+    respawn_timer: Option<ResMut<PlayerRespawnTimer>>,
+    mut meshes: ResMut<Assets<Mesh>>,
+    mut materials: ResMut<Assets<StandardMaterial>>,
+) {
+    let Some(mut respawn) = respawn_timer else {
+        return;
+    };
+
+    respawn.timer.tick(time.delta());
+
+    if respawn.timer.is_finished() {
+        commands.remove_resource::<PlayerRespawnTimer>();
+        spawn_player_ship_invulnerable(&mut commands, &mut meshes, &mut materials);
     }
 }

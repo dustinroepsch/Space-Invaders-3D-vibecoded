@@ -18,13 +18,7 @@ impl Plugin for ScoreboardPlugin {
                 Update,
                 wave_transition_tick.run_if(in_state(GameState::WaveTransition)),
             )
-            .add_systems(OnExit(GameState::WaveTransition), cleanup_wave_transition)
-            // Victory
-            .add_systems(OnEnter(GameState::Victory), show_victory)
-            .add_systems(
-                Update,
-                restart_from_victory.run_if(in_state(GameState::Victory)),
-            );
+            .add_systems(OnExit(GameState::WaveTransition), cleanup_wave_transition);
     }
 }
 
@@ -36,7 +30,7 @@ struct GameOverUI;
 
 fn spawn_scoreboard(mut commands: Commands) {
     commands.spawn((
-        Text::new("Wave 1 | Score: 0"),
+        Text::new("Lives: 3 | Wave 1 | Score: 0"),
         TextFont {
             font_size: 36.0,
             ..default()
@@ -54,14 +48,19 @@ fn spawn_scoreboard(mut commands: Commands) {
 
 fn update_scoreboard(
     score: Res<Score>,
+    high_score: Res<HighScore>,
     current_wave: Res<CurrentWave>,
+    lives: Res<Lives>,
     mut query: Query<&mut Text, With<ScoreText>>,
 ) {
-    if !score.is_changed() && !current_wave.is_changed() {
+    if !score.is_changed() && !current_wave.is_changed() && !lives.is_changed() {
         return;
     }
     for mut text in &mut query {
-        **text = format!("Wave {} | Score: {}", current_wave.wave, score.value);
+        **text = format!(
+            "Lives: {} | Wave {} | Score: {} | Hi: {}",
+            lives.count, current_wave.wave, score.value, high_score.value
+        );
     }
 }
 
@@ -118,6 +117,18 @@ fn show_game_over(mut commands: Commands, score: Res<Score>) {
         });
 }
 
+type GameEntityFilter = Or<(
+    With<Enemy>,
+    With<Bullet>,
+    With<EnemyBullet>,
+    With<Player>,
+    With<ExplosionParticle>,
+    With<TrailParticle>,
+    With<ScorePopup>,
+    With<Barrier>,
+    With<MysteryShip>,
+)>;
+
 #[allow(clippy::too_many_arguments)]
 fn restart_game(
     mut commands: Commands,
@@ -127,14 +138,9 @@ fn restart_game(
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<StandardMaterial>>,
     mut current_wave: ResMut<CurrentWave>,
+    mut lives: ResMut<Lives>,
     game_over_ui: Query<Entity, With<GameOverUI>>,
-    enemies: Query<Entity, With<Enemy>>,
-    bullets: Query<Entity, With<Bullet>>,
-    enemy_bullets: Query<Entity, With<EnemyBullet>>,
-    player: Query<Entity, With<Player>>,
-    explosions: Query<Entity, With<ExplosionParticle>>,
-    trails: Query<Entity, With<TrailParticle>>,
-    score_popups: Query<Entity, With<ScorePopup>>,
+    game_entities: Query<Entity, GameEntityFilter>,
 ) {
     let (_, _, touch_fire) = touch_input();
     if !keyboard.just_pressed(KeyCode::Space) && !touch_fire {
@@ -147,35 +153,21 @@ fn restart_game(
     }
 
     // Despawn all game entities
-    for entity in &enemies {
-        commands.entity(entity).despawn();
-    }
-    for entity in &bullets {
-        commands.entity(entity).despawn();
-    }
-    for entity in &enemy_bullets {
-        commands.entity(entity).despawn();
-    }
-    for entity in &player {
-        commands.entity(entity).despawn();
-    }
-    for entity in &explosions {
-        commands.entity(entity).despawn();
-    }
-    for entity in &trails {
-        commands.entity(entity).despawn();
-    }
-    for entity in &score_popups {
+    for entity in &game_entities {
         commands.entity(entity).despawn();
     }
 
-    // Reset score, wave, and respawn player
+    // Remove respawn timer if present
+    commands.remove_resource::<PlayerRespawnTimer>();
+
+    // Reset score, wave, and lives
     score.value = 0;
     current_wave.wave = 1;
+    lives.count = 3;
 
     spawn_player_ship(&mut commands, &mut meshes, &mut materials);
 
-    // Transition back to playing — OnEnter(Playing) will spawn enemies
+    // Transition back to playing — OnEnter(Playing) will spawn enemies and barriers
     next_state.set(GameState::Playing);
 }
 
@@ -249,6 +241,7 @@ fn cleanup_wave_transition(
     enemy_bullets: Query<Entity, With<EnemyBullet>>,
     explosions: Query<Entity, With<ExplosionParticle>>,
     trails: Query<Entity, With<TrailParticle>>,
+    barriers: Query<Entity, With<Barrier>>,
 ) {
     for entity in &transition_ui {
         commands.entity(entity).despawn();
@@ -265,119 +258,8 @@ fn cleanup_wave_transition(
     for entity in &trails {
         commands.entity(entity).despawn();
     }
-}
-
-// --- Victory ---
-
-fn show_victory(mut commands: Commands, score: Res<Score>) {
-    commands
-        .spawn((
-            Node {
-                width: Val::Percent(100.0),
-                height: Val::Percent(100.0),
-                position_type: PositionType::Absolute,
-                top: Val::Px(0.0),
-                left: Val::Px(0.0),
-                justify_content: JustifyContent::Center,
-                align_items: AlignItems::Center,
-                flex_direction: FlexDirection::Column,
-                ..default()
-            },
-            BackgroundColor(Color::srgba(0.0, 0.0, 0.05, 0.8)),
-            VictoryUI,
-        ))
-        .with_children(|parent| {
-            parent.spawn((
-                Text::new("YOU WIN!"),
-                TextFont {
-                    font_size: 90.0,
-                    ..default()
-                },
-                TextColor(Color::srgb(1.0, 0.85, 0.2)),
-            ));
-            parent.spawn((
-                Text::new(format!("Final Score: {}", score.value)),
-                TextFont {
-                    font_size: 44.0,
-                    ..default()
-                },
-                TextColor(Color::srgb(0.9, 0.9, 0.5)),
-                Node {
-                    margin: UiRect::top(Val::Px(15.0)),
-                    ..default()
-                },
-            ));
-            parent.spawn((
-                Text::new("Press SPACE or tap FIRE to play again"),
-                TextFont {
-                    font_size: 30.0,
-                    ..default()
-                },
-                TextColor(Color::srgb(0.7, 0.7, 0.8)),
-                Node {
-                    margin: UiRect::top(Val::Px(25.0)),
-                    ..default()
-                },
-            ));
-        });
-}
-
-#[allow(clippy::too_many_arguments)]
-fn restart_from_victory(
-    mut commands: Commands,
-    keyboard: Res<ButtonInput<KeyCode>>,
-    mut next_state: ResMut<NextState<GameState>>,
-    mut score: ResMut<Score>,
-    mut meshes: ResMut<Assets<Mesh>>,
-    mut materials: ResMut<Assets<StandardMaterial>>,
-    mut current_wave: ResMut<CurrentWave>,
-    victory_ui: Query<Entity, With<VictoryUI>>,
-    enemies: Query<Entity, With<Enemy>>,
-    bullets: Query<Entity, With<Bullet>>,
-    enemy_bullets: Query<Entity, With<EnemyBullet>>,
-    player: Query<Entity, With<Player>>,
-    explosions: Query<Entity, With<ExplosionParticle>>,
-    trails: Query<Entity, With<TrailParticle>>,
-    score_popups: Query<Entity, With<ScorePopup>>,
-) {
-    let (_, _, touch_fire) = touch_input();
-    if !keyboard.just_pressed(KeyCode::Space) && !touch_fire {
-        return;
-    }
-
-    // Despawn victory UI
-    for entity in &victory_ui {
+    // Despawn old barriers so they get freshly spawned in OnEnter(Playing)
+    for entity in &barriers {
         commands.entity(entity).despawn();
     }
-
-    // Despawn all game entities
-    for entity in &enemies {
-        commands.entity(entity).despawn();
-    }
-    for entity in &bullets {
-        commands.entity(entity).despawn();
-    }
-    for entity in &enemy_bullets {
-        commands.entity(entity).despawn();
-    }
-    for entity in &player {
-        commands.entity(entity).despawn();
-    }
-    for entity in &explosions {
-        commands.entity(entity).despawn();
-    }
-    for entity in &trails {
-        commands.entity(entity).despawn();
-    }
-    for entity in &score_popups {
-        commands.entity(entity).despawn();
-    }
-
-    // Reset everything
-    score.value = 0;
-    current_wave.wave = 1;
-
-    spawn_player_ship(&mut commands, &mut meshes, &mut materials);
-
-    next_state.set(GameState::Playing);
 }

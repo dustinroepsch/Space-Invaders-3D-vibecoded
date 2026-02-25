@@ -13,6 +13,7 @@ impl Plugin for EnemyPlugin {
             .init_resource::<EnemyShootTimer>()
             .init_resource::<EnemySpeed>()
             .init_resource::<CurrentWave>()
+            .init_resource::<InitialEnemyCount>()
             .add_systems(OnEnter(GameState::Playing), setup_wave)
             .add_systems(
                 Update,
@@ -29,8 +30,8 @@ impl Plugin for EnemyPlugin {
 const VOXEL_SIZE: f32 = 0.14;
 const VOXEL_STEP: f32 = 0.20;
 
-/// (col_x, height_y, depth_z) integer offsets, each multiplied by VOXEL_STEP.
-/// Positive z = toward player.
+// (col_x, height_y, depth_z) integer offsets, each multiplied by VOXEL_STEP.
+// Positive z = toward player.
 
 // --- Squid (row 0) --- compact square body + tall antennae
 const SQUID_BODY: &[(i8, i8, i8)] = &[
@@ -110,7 +111,7 @@ pub fn spawn_enemy_wave(
 ) {
     let voxel_mesh = meshes.add(Cuboid::new(VOXEL_SIZE, VOXEL_SIZE, VOXEL_SIZE));
 
-    let grid_width = (config.cols - 1) as f32 * ENEMY_SPACING;
+    let grid_width = (config.cols - 1) as f32 * ENEMY_COL_SPACING;
     let start_x = -grid_width / 2.0;
 
     for row in 0..config.rows {
@@ -131,6 +132,7 @@ pub fn spawn_enemy_wave(
         });
 
         let alien_type = alien_type_for_row(row);
+        #[allow(clippy::type_complexity)]
         let (body_voxels, detail_voxels): (&[(i8, i8, i8)], &[(i8, i8, i8)]) = match alien_type {
             0 => (SQUID_BODY, SQUID_DETAIL),
             1 => (CRAB_BODY, CRAB_DETAIL),
@@ -138,8 +140,8 @@ pub fn spawn_enemy_wave(
         };
 
         for col in 0..config.cols {
-            let x = start_x + col as f32 * ENEMY_SPACING;
-            let z = (ENEMY_START_Z + config.z_offset) - row as f32 * ENEMY_SPACING;
+            let x = start_x + col as f32 * ENEMY_COL_SPACING;
+            let z = (ENEMY_START_Z + config.z_offset) - row as f32 * ENEMY_ROW_SPACING;
 
             let bm = body_mat.clone();
             let dm = detail_mat.clone();
@@ -151,6 +153,7 @@ pub fn spawn_enemy_wave(
                     Visibility::default(),
                     Enemy,
                     EnemyRow(row),
+                    EnemyCol(col),
                 ))
                 .with_children(|parent| {
                     for &(cx, cy, cz) in body_voxels {
@@ -180,6 +183,7 @@ pub fn spawn_enemy_wave(
     }
 }
 
+#[allow(clippy::too_many_arguments)]
 fn setup_wave(
     mut commands: Commands,
     mut meshes: ResMut<Assets<Mesh>>,
@@ -188,19 +192,22 @@ fn setup_wave(
     mut enemy_speed: ResMut<EnemySpeed>,
     mut shoot_timer: ResMut<EnemyShootTimer>,
     mut enemy_dir: ResMut<EnemyDirection>,
+    mut initial_count: ResMut<InitialEnemyCount>,
 ) {
     let config = wave_config(current_wave.wave);
 
-    enemy_speed.speed = config.speed;
+    enemy_speed.base_speed = config.base_speed;
     shoot_timer.timer = Timer::from_seconds(config.shoot_interval, TimerMode::Repeating);
     enemy_dir.dir = 1.0;
+
+    let total = (config.rows * config.cols) as u32;
+    initial_count.count = total;
 
     spawn_enemy_wave(&mut commands, &mut meshes, &mut materials, &config);
 }
 
 fn check_wave_cleared(
     mut next_state: ResMut<NextState<GameState>>,
-    current_wave: Res<CurrentWave>,
     enemies: Query<(), With<Enemy>>,
     mut sound_queue: ResMut<SoundQueue>,
 ) {
@@ -209,19 +216,36 @@ fn check_wave_cleared(
     }
 
     sound_queue.0.push(SoundKind::WaveCleared);
-    if current_wave.wave >= 10 {
-        next_state.set(GameState::Victory);
-    } else {
-        next_state.set(GameState::WaveTransition);
+    // Game loops endlessly like the original — always transition to next wave.
+    next_state.set(GameState::WaveTransition);
+}
+
+/// Calculates the current effective speed based on how many enemies remain.
+/// Fewer enemies → faster movement, matching the original arcade behavior.
+fn effective_speed(base_speed: f32, initial: u32, remaining: u32) -> f32 {
+    if remaining == 0 {
+        return base_speed;
     }
+    // Scale speed inversely with remaining count.
+    // With 55 initial and 1 remaining, this gives ~7.4x base speed.
+    let ratio = initial as f32 / remaining as f32;
+    base_speed * ratio.powf(0.7)
 }
 
 fn enemy_movement(
     time: Res<Time>,
     enemy_speed: Res<EnemySpeed>,
+    initial_count: Res<InitialEnemyCount>,
     mut direction: ResMut<EnemyDirection>,
     mut query: Query<&mut Transform, With<Enemy>>,
 ) {
+    let remaining = query.iter().len() as u32;
+    if remaining == 0 {
+        return;
+    }
+
+    let speed = effective_speed(enemy_speed.base_speed, initial_count.count, remaining);
+
     let mut should_reverse = false;
     for transform in &query {
         let x = transform.translation.x;
@@ -239,20 +263,24 @@ fn enemy_movement(
             transform.translation.z += ENEMY_STEP_DOWN;
         }
     } else {
-        let dx = direction.dir * enemy_speed.speed * time.delta_secs();
+        let dx = direction.dir * speed * time.delta_secs();
         for mut transform in &mut query {
             transform.translation.x += dx;
         }
     }
 }
 
+/// Only the bottommost alive enemy in each column can shoot,
+/// matching the original arcade behavior. Max 3 enemy bullets on screen.
+#[allow(clippy::too_many_arguments)]
 fn enemy_shoot(
     mut commands: Commands,
     time: Res<Time>,
     mut timer: ResMut<EnemyShootTimer>,
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<StandardMaterial>>,
-    query: Query<&Transform, With<Enemy>>,
+    query: Query<(&Transform, &EnemyCol, &EnemyRow), With<Enemy>>,
+    existing_bullets: Query<(), With<EnemyBullet>>,
     mut sound_queue: ResMut<SoundQueue>,
 ) {
     timer.timer.tick(time.delta());
@@ -261,14 +289,31 @@ fn enemy_shoot(
         return;
     }
 
-    let enemies: Vec<&Transform> = query.iter().collect();
-    if enemies.is_empty() {
+    // Enforce max enemy bullets on screen.
+    if existing_bullets.iter().len() >= MAX_ENEMY_BULLETS {
+        return;
+    }
+
+    // Find the bottommost enemy in each column (highest row number = closest to player).
+    let mut bottom_enemies: std::collections::HashMap<usize, (usize, Vec3)> =
+        std::collections::HashMap::new();
+
+    for (transform, col, row) in &query {
+        let entry = bottom_enemies.entry(col.0).or_insert((row.0, transform.translation));
+        // Higher row number = closer to player (larger z) = bottom of formation
+        if row.0 > entry.0 {
+            *entry = (row.0, transform.translation);
+        }
+    }
+
+    let shooters: Vec<Vec3> = bottom_enemies.values().map(|(_, pos)| *pos).collect();
+    if shooters.is_empty() {
         return;
     }
 
     let mut rng = rand::thread_rng();
-    let idx = rng.gen_range(0..enemies.len());
-    let pos = enemies[idx].translation;
+    let idx = rng.gen_range(0..shooters.len());
+    let pos = shooters[idx];
 
     commands.spawn((
         Mesh3d(meshes.add(Cuboid::new(0.15, 0.15, 0.4))),

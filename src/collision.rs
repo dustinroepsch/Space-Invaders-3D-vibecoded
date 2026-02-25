@@ -18,15 +18,18 @@ impl Plugin for CollisionPlugin {
                 bullet_barrier_collision,
                 enemy_bullet_barrier_collision,
                 bullet_mystery_ship_collision,
+                enemy_barrier_collision,
             )
                 .run_if(in_state(GameState::Playing)),
         );
     }
 }
 
+#[allow(clippy::too_many_arguments)]
 fn bullet_enemy_collision(
     mut commands: Commands,
     mut score: ResMut<Score>,
+    mut high_score: ResMut<HighScore>,
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<StandardMaterial>>,
     bullets: Query<(Entity, &Transform), With<Bullet>>,
@@ -43,7 +46,11 @@ fn bullet_enemy_collision(
                 let row = enemy_row.0;
                 commands.entity(bullet_entity).despawn();
                 commands.entity(enemy_entity).despawn();
-                score.value += 10;
+                let pts = points_for_row(row);
+                score.value += pts;
+                if score.value > high_score.value {
+                    high_score.value = score.value;
+                }
                 spawn_explosion(&mut commands, &mut meshes, &mut materials, pos, row);
                 sound_queue.0.push(SoundKind::EnemyDie);
                 break;
@@ -52,16 +59,25 @@ fn bullet_enemy_collision(
     }
 }
 
+#[allow(clippy::too_many_arguments)]
 fn enemy_bullet_player_collision(
     mut commands: Commands,
     mut next_state: ResMut<NextState<GameState>>,
+    mut meshes: ResMut<Assets<Mesh>>,
+    mut materials: ResMut<Assets<StandardMaterial>>,
     enemy_bullets: Query<(Entity, &Transform), With<EnemyBullet>>,
-    players: Query<&Transform, With<Player>>,
+    players: Query<(Entity, &Transform, Option<&PlayerInvulnerable>), With<Player>>,
+    mut lives: ResMut<Lives>,
     mut sound_queue: ResMut<SoundQueue>,
 ) {
-    let Ok(player_transform) = players.single() else {
+    let Ok((player_entity, player_transform, invulnerable)) = players.single() else {
         return;
     };
+
+    // Skip collision if player is invulnerable.
+    if invulnerable.is_some() {
+        return;
+    }
 
     for (bullet_entity, bullet_transform) in &enemy_bullets {
         let distance = bullet_transform
@@ -70,7 +86,23 @@ fn enemy_bullet_player_collision(
         if distance < COLLISION_DISTANCE {
             commands.entity(bullet_entity).despawn();
             sound_queue.0.push(SoundKind::PlayerDie);
-            next_state.set(GameState::GameOver);
+
+            // Spawn explosion at player position.
+            let pos = player_transform.translation;
+            spawn_explosion(&mut commands, &mut meshes, &mut materials, pos, 1);
+
+            if lives.count <= 1 {
+                // No lives left — game over.
+                lives.count = 0;
+                next_state.set(GameState::GameOver);
+            } else {
+                // Lose a life, despawn player, start respawn timer.
+                lives.count -= 1;
+                commands.entity(player_entity).despawn();
+                commands.insert_resource(PlayerRespawnTimer {
+                    timer: Timer::from_seconds(1.2, TimerMode::Once),
+                });
+            }
             return;
         }
     }
@@ -79,9 +111,11 @@ fn enemy_bullet_player_collision(
 fn enemy_reaches_bottom(
     mut next_state: ResMut<NextState<GameState>>,
     enemies: Query<&Transform, With<Enemy>>,
+    mut lives: ResMut<Lives>,
 ) {
     for transform in &enemies {
         if transform.translation.z >= GAME_OVER_Z {
+            lives.count = 0;
             next_state.set(GameState::GameOver);
             return;
         }
@@ -142,9 +176,29 @@ fn enemy_bullet_barrier_collision(
     }
 }
 
+/// Aliens walking into barriers destroy the barrier blocks (original behavior).
+fn enemy_barrier_collision(
+    mut commands: Commands,
+    enemies: Query<&Transform, With<Enemy>>,
+    barriers: Query<(Entity, &Transform), With<Barrier>>,
+) {
+    for enemy_transform in &enemies {
+        for (barrier_entity, barrier_transform) in &barriers {
+            let dist = enemy_transform
+                .translation
+                .distance(barrier_transform.translation);
+            if dist < BARRIER_COLLISION_DISTANCE + 0.2 {
+                commands.entity(barrier_entity).despawn();
+            }
+        }
+    }
+}
+
+#[allow(clippy::too_many_arguments)]
 fn bullet_mystery_ship_collision(
     mut commands: Commands,
     mut score: ResMut<Score>,
+    mut high_score: ResMut<HighScore>,
     mut events: MessageWriter<MysteryShipKilledEvent>,
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<StandardMaterial>>,
@@ -160,6 +214,9 @@ fn bullet_mystery_ship_collision(
             if dist < MYSTERY_SHIP_COLLISION_DISTANCE {
                 let pos = ship_transform.translation;
                 score.value += points.0;
+                if score.value > high_score.value {
+                    high_score.value = score.value;
+                }
                 events.write(MysteryShipKilledEvent {
                     points: points.0,
                     world_pos: pos,
