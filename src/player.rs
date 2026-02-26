@@ -30,16 +30,23 @@ pub fn spawn_player_ship(
 ) {
     let body_mat = materials.add(StandardMaterial {
         base_color: Color::srgb(0.15, 0.3, 0.9),
-        metallic: 0.9,
-        perceptual_roughness: 0.2,
+        metallic: 0.0,
+        perceptual_roughness: 0.05,
         emissive: LinearRgba::new(0.3, 0.5, 2.0, 1.0),
+        specular_transmission: 0.5,
+        ior: 1.5,
+        thickness: 0.4,
+        alpha_mode: AlphaMode::Blend,
         ..default()
     });
 
     let wing_mat = materials.add(StandardMaterial {
-        base_color: Color::srgba(0.1, 0.15, 0.6, 0.85),
-        metallic: 0.7,
-        perceptual_roughness: 0.3,
+        base_color: Color::srgba(0.1, 0.15, 0.6, 0.75),
+        metallic: 0.0,
+        perceptual_roughness: 0.05,
+        specular_transmission: 0.7,
+        ior: 1.5,
+        thickness: 0.1,
         alpha_mode: AlphaMode::Blend,
         ..default()
     });
@@ -47,6 +54,12 @@ pub fn spawn_player_ship(
     let cockpit_mat = materials.add(StandardMaterial {
         base_color: Color::srgb(0.2, 0.9, 1.0),
         emissive: LinearRgba::new(2.0, 8.0, 10.0, 1.0),
+        metallic: 0.0,
+        perceptual_roughness: 0.02,
+        specular_transmission: 0.8,
+        ior: 1.5,
+        thickness: 0.2,
+        alpha_mode: AlphaMode::Blend,
         ..default()
     });
 
@@ -88,16 +101,23 @@ pub fn spawn_player_ship_invulnerable(
 ) {
     let body_mat = materials.add(StandardMaterial {
         base_color: Color::srgb(0.15, 0.3, 0.9),
-        metallic: 0.9,
-        perceptual_roughness: 0.2,
+        metallic: 0.0,
+        perceptual_roughness: 0.05,
         emissive: LinearRgba::new(0.3, 0.5, 2.0, 1.0),
+        specular_transmission: 0.5,
+        ior: 1.5,
+        thickness: 0.4,
+        alpha_mode: AlphaMode::Blend,
         ..default()
     });
 
     let wing_mat = materials.add(StandardMaterial {
-        base_color: Color::srgba(0.1, 0.15, 0.6, 0.85),
-        metallic: 0.7,
-        perceptual_roughness: 0.3,
+        base_color: Color::srgba(0.1, 0.15, 0.6, 0.75),
+        metallic: 0.0,
+        perceptual_roughness: 0.05,
+        specular_transmission: 0.7,
+        ior: 1.5,
+        thickness: 0.1,
         alpha_mode: AlphaMode::Blend,
         ..default()
     });
@@ -105,6 +125,12 @@ pub fn spawn_player_ship_invulnerable(
     let cockpit_mat = materials.add(StandardMaterial {
         base_color: Color::srgb(0.2, 0.9, 1.0),
         emissive: LinearRgba::new(2.0, 8.0, 10.0, 1.0),
+        metallic: 0.0,
+        perceptual_roughness: 0.02,
+        specular_transmission: 0.8,
+        ior: 1.5,
+        thickness: 0.2,
+        alpha_mode: AlphaMode::Blend,
         ..default()
     });
 
@@ -234,6 +260,12 @@ fn player_shoot(
         MeshMaterial3d(materials.add(StandardMaterial {
             base_color: Color::srgb(1.0, 1.0, 0.2),
             emissive: LinearRgba::new(15.0, 15.0, 3.0, 1.0),
+            metallic: 0.0,
+            perceptual_roughness: 0.05,
+            specular_transmission: 0.55,
+            ior: 1.5,
+            thickness: 0.15,
+            alpha_mode: AlphaMode::Blend,
             ..default()
         })),
         Transform::from_xyz(pos.x, pos.y + 0.3, pos.z - 0.5),

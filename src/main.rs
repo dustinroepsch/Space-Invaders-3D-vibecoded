@@ -11,6 +11,7 @@ mod player;
 mod scoreboard;
 mod sound;
 
+use bevy::core_pipeline::prepass::DepthPrepass;
 use bevy::prelude::*;
 use rand::Rng;
 
@@ -82,10 +83,12 @@ fn setup_scene(
     mut materials: ResMut<Assets<StandardMaterial>>,
 ) {
     // Camera: pulled back and higher to see the wider arena (18 units wide).
+    // DepthPrepass is required for PBR specular_transmission (glass effect).
     commands.spawn((
         Camera3d::default(),
         Transform::from_xyz(0.0, 18.0, 20.0).looking_at(Vec3::new(0.0, 0.0, 0.0), Vec3::Y),
         CrtSettings,
+        DepthPrepass,
     ));
 
     // Directional light

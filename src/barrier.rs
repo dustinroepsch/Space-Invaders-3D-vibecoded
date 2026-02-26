@@ -88,8 +88,12 @@ pub fn barrier_material(health: u8) -> StandardMaterial {
     StandardMaterial {
         base_color: color,
         emissive,
-        metallic: 0.4,
-        perceptual_roughness: 0.5,
+        metallic: 0.0,
+        perceptual_roughness: 0.05,
+        specular_transmission: 0.55,
+        ior: 1.5,
+        thickness: BARRIER_BLOCK_SIZE,
+        alpha_mode: AlphaMode::Blend,
         ..default()
     }
 }

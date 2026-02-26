@@ -56,22 +56,34 @@ fn spawn_mystery_ship(
     let hull_mat = materials.add(StandardMaterial {
         base_color: Color::srgb(0.85, 0.08, 0.15),
         emissive: LinearRgba::new(10.0, 0.8, 1.5, 1.0),
-        metallic: 0.85,
-        perceptual_roughness: 0.15,
+        metallic: 0.0,
+        perceptual_roughness: 0.05,
+        specular_transmission: 0.5,
+        ior: 1.5,
+        thickness: 0.25,
+        alpha_mode: AlphaMode::Blend,
         ..default()
     });
     let dome_mat = materials.add(StandardMaterial {
         base_color: Color::srgb(0.75, 0.85, 1.0),
         emissive: LinearRgba::new(3.0, 4.0, 12.0, 1.0),
-        metallic: 0.95,
-        perceptual_roughness: 0.05,
+        metallic: 0.0,
+        perceptual_roughness: 0.02,
+        specular_transmission: 0.8,
+        ior: 1.5,
+        thickness: 0.42,
+        alpha_mode: AlphaMode::Blend,
         ..default()
     });
     let nacelle_mat = materials.add(StandardMaterial {
         base_color: Color::srgb(1.0, 0.4, 0.05),
         emissive: LinearRgba::new(10.0, 3.0, 0.3, 1.0),
-        metallic: 0.6,
-        perceptual_roughness: 0.3,
+        metallic: 0.0,
+        perceptual_roughness: 0.05,
+        specular_transmission: 0.5,
+        ior: 1.5,
+        thickness: 0.18,
+        alpha_mode: AlphaMode::Blend,
         ..default()
     });
 

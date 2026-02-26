@@ -118,16 +118,24 @@ pub fn spawn_enemy_wave(
         let body_mat = materials.add(StandardMaterial {
             base_color: row_color(row),
             emissive: row_emissive(row),
-            metallic: 0.6,
-            perceptual_roughness: 0.3,
+            metallic: 0.0,
+            perceptual_roughness: 0.05,
+            specular_transmission: 0.6,
+            ior: 1.5,
+            thickness: VOXEL_SIZE,
+            alpha_mode: AlphaMode::Blend,
             ..default()
         });
         let (dc, de) = detail_color(row);
         let detail_mat = materials.add(StandardMaterial {
             base_color: dc,
             emissive: de,
-            metallic: 0.2,
-            perceptual_roughness: 0.2,
+            metallic: 0.0,
+            perceptual_roughness: 0.05,
+            specular_transmission: 0.5,
+            ior: 1.5,
+            thickness: VOXEL_SIZE,
+            alpha_mode: AlphaMode::Blend,
             ..default()
         });
 
@@ -320,6 +328,12 @@ fn enemy_shoot(
         MeshMaterial3d(materials.add(StandardMaterial {
             base_color: Color::srgb(1.0, 0.2, 0.2),
             emissive: LinearRgba::new(15.0, 3.0, 3.0, 1.0),
+            metallic: 0.0,
+            perceptual_roughness: 0.05,
+            specular_transmission: 0.55,
+            ior: 1.5,
+            thickness: 0.15,
+            alpha_mode: AlphaMode::Blend,
             ..default()
         })),
         Transform::from_xyz(pos.x, pos.y, pos.z + 0.5),
