@@ -52,6 +52,12 @@ pub fn spawn_explosion(
     let material = materials.add(StandardMaterial {
         base_color: color,
         emissive,
+        metallic: 0.0,
+        perceptual_roughness: 0.05,
+        specular_transmission: 0.55,
+        ior: 1.5,
+        thickness: 0.12,
+        alpha_mode: AlphaMode::Blend,
         ..default()
     });
 
