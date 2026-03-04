@@ -14,10 +14,14 @@ mod sound;
 use bevy::prelude::*;
 use rand::Rng;
 
+/// Marks the primary 3D camera so screen-shake can locate it.
+#[derive(Component)]
+struct MainCamera;
+
 use barrier::BarrierPlugin;
 use bullet::BulletPlugin;
 use collision::CollisionPlugin;
-use components::{GameState, HighScore, Score};
+use components::{GameState, HighScore, Score, ScreenShake};
 use crt::{CrtPlugin, CrtSettings};
 use effects::EffectsPlugin;
 use enemy::EnemyPlugin;
@@ -43,6 +47,7 @@ fn main() {
         .init_state::<GameState>()
         .init_resource::<Score>()
         .init_resource::<HighScore>()
+        .init_resource::<ScreenShake>()
         .add_plugins((
             PlayerPlugin,
             EnemyPlugin,
@@ -57,7 +62,7 @@ fn main() {
             SoundPlugin,
         ))
         .add_systems(Startup, (setup_scene, spawn_starfield))
-        .add_systems(Update, update_ui_scale)
+        .add_systems(Update, (update_ui_scale, apply_screen_shake))
         .run();
 }
 
@@ -86,6 +91,7 @@ fn setup_scene(
         Camera3d::default(),
         Transform::from_xyz(0.0, 18.0, 20.0).looking_at(Vec3::new(0.0, 0.0, 0.0), Vec3::Y),
         CrtSettings,
+        MainCamera,
     ));
 
     // Directional light
@@ -117,6 +123,37 @@ fn setup_scene(
         Transform::from_xyz(0.0, 0.0, 0.0)
             .with_rotation(Quat::from_rotation_x(-std::f32::consts::FRAC_PI_2)),
     ));
+}
+
+const CAMERA_BASE: Vec3 = Vec3::new(0.0, 18.0, 20.0);
+
+/// Decays screen-shake trauma each frame and offsets the camera proportional
+/// to trauma² (the standard "Game Feel" formula for natural-feeling shake).
+fn apply_screen_shake(
+    mut shake: ResMut<ScreenShake>,
+    time: Res<Time>,
+    mut cameras: Query<&mut Transform, With<MainCamera>>,
+) {
+    let Ok(mut transform) = cameras.single_mut() else {
+        return;
+    };
+
+    shake.trauma = (shake.trauma - time.delta_secs() * 2.0).max(0.0);
+
+    let intensity = shake.trauma * shake.trauma;
+    if intensity > 0.0001 {
+        let mut rng = rand::thread_rng();
+        let max_offset = 0.4_f32;
+        let dx = rng.gen_range(-1.0_f32..1.0) * max_offset * intensity;
+        let dy = rng.gen_range(-1.0_f32..1.0) * max_offset * intensity;
+        *transform =
+            Transform::from_xyz(CAMERA_BASE.x + dx, CAMERA_BASE.y + dy, CAMERA_BASE.z)
+                .looking_at(Vec3::ZERO, Vec3::Y);
+    } else {
+        *transform =
+            Transform::from_xyz(CAMERA_BASE.x, CAMERA_BASE.y, CAMERA_BASE.z)
+                .looking_at(Vec3::ZERO, Vec3::Y);
+    }
 }
 
 fn spawn_starfield(

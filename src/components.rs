@@ -283,3 +283,18 @@ pub const BARRIER_COLLISION_DISTANCE: f32 = 0.35;
 
 /// Maximum number of enemy bullets on screen at once (original had 3).
 pub const MAX_ENEMY_BULLETS: usize = 3;
+
+// --- Screen Shake ---
+
+/// Trauma-based screen shake. Add trauma (0.0–1.0) on impact events;
+/// the system decays it over time and applies a squared offset to the camera.
+#[derive(Resource, Default)]
+pub struct ScreenShake {
+    pub trauma: f32,
+}
+
+impl ScreenShake {
+    pub fn add_trauma(&mut self, amount: f32) {
+        self.trauma = (self.trauma + amount).min(1.0);
+    }
+}

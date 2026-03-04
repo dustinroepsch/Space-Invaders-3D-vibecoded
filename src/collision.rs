@@ -4,6 +4,7 @@ use crate::barrier::barrier_material;
 use crate::components::*;
 use crate::effects::spawn_explosion;
 use crate::sound::{SoundKind, SoundQueue};
+use crate::ScreenShake;
 
 pub struct CollisionPlugin;
 
@@ -35,6 +36,7 @@ fn bullet_enemy_collision(
     bullets: Query<(Entity, &Transform), With<Bullet>>,
     enemies: Query<(Entity, &Transform, &EnemyRow), With<Enemy>>,
     mut sound_queue: ResMut<SoundQueue>,
+    mut shake: ResMut<ScreenShake>,
 ) {
     for (bullet_entity, bullet_transform) in &bullets {
         for (enemy_entity, enemy_transform, enemy_row) in &enemies {
@@ -53,6 +55,7 @@ fn bullet_enemy_collision(
                 }
                 spawn_explosion(&mut commands, &mut meshes, &mut materials, pos, row);
                 sound_queue.0.push(SoundKind::EnemyDie);
+                shake.add_trauma(0.25);
                 break;
             }
         }
@@ -205,6 +208,7 @@ fn bullet_mystery_ship_collision(
     bullets: Query<(Entity, &Transform), With<Bullet>>,
     ships: Query<(Entity, &Transform, &MysteryShipPoints), With<MysteryShip>>,
     mut sound_queue: ResMut<SoundQueue>,
+    mut shake: ResMut<ScreenShake>,
 ) {
     for (bullet_entity, bullet_transform) in &bullets {
         for (ship_entity, ship_transform, points) in &ships {
@@ -232,6 +236,7 @@ fn bullet_mystery_ship_collision(
                     2,
                 );
                 sound_queue.0.push(SoundKind::MysteryShipDie);
+                shake.add_trauma(0.6);
                 break;
             }
         }
